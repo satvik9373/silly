@@ -1,0 +1,726 @@
+<!doctype html>
+<html class="wa-theme-awesome"><head><meta charset="utf-8">
+<link rel="stylesheet" href="vendor/webawesome/styles/webawesome.css">
+<script type="module" src="vendor/webawesome/webawesome.loader.js"></script>
+<!-- Silly settings. Silly.exe calls st.load({prefs, state}) and gets {do:'set', k, v} and other actions back. -->
+<style>
+  :root {
+    --fg: #1d1d1f; --fg2: #6e6e73; --fg3: #8e8e93; --card: rgba(255,255,255,.66); --line: rgba(0,0,0,.08);
+    --side: rgba(255,255,255,.28); --sel: rgba(0,0,0,.06); --accent: #0a84ff; --green: #34c759; --track: rgba(120,120,128,.24);
+    --ease: cubic-bezier(.4,0,.2,1); --out: cubic-bezier(.16,1,.3,1);
+  }
+  @media (prefers-color-scheme: dark) { :root {
+    --fg: #f5f5f7; --fg2: #a1a1a6; --fg3: #8e8e93; --card: rgba(255,255,255,.055); --line: rgba(255,255,255,.08);
+    --side: rgba(0,0,0,.12); --sel: rgba(255,255,255,.08); --track: rgba(120,120,128,.36);
+  } }
+  html, body { margin: 0; height: 100%; background: transparent; overflow: hidden; -webkit-user-select: none; cursor: default;
+    font: 13px -apple-system, system-ui, sans-serif; color: var(--fg); -webkit-font-smoothing: antialiased; }
+  body { display: flex; }
+
+  /* sidebar */
+  nav { width: 208px; flex: none; padding: 46px 10px 14px; box-sizing: border-box; background: var(--side);
+    box-shadow: inset -.5px 0 0 var(--line); display: flex; flex-direction: column; gap: 2px; }
+  .me { display: flex; align-items: center; gap: 10px; padding: 4px 8px 16px; }
+  .me img { width: 38px; height: 38px; }
+  .me b { display: block; font: 500 14px system-ui; } .me span { color: var(--fg3); font-size: 11px; }
+  nav button { all: unset; display: flex; align-items: center; gap: 9px; height: 30px; padding: 0 8px; border-radius: 7px;
+    font-size: 13px; color: var(--fg); transition: background .15s; }
+  nav button:hover { background: var(--sel); }
+  nav button.on { background: var(--accent); color: #fff; }
+  nav button:focus-visible { outline: 2px solid rgba(10,132,255,.5); }
+  .ni { width: 22px; height: 22px; border-radius: 6px; display: grid; place-items: center; flex: none; }
+  .ni svg { width: 14px; height: 14px; fill: none; stroke: #fff; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+  nav .spacer { flex: 1; }
+  nav .ver { color: var(--fg3); font-size: 11px; padding: 0 8px; }
+
+  /* content */
+  main { flex: 1; overflow-y: auto; padding: 40px 34px 34px; box-sizing: border-box; }
+  section { display: none; max-width: 520px; margin: 0 auto; }
+  section.on { display: block; animation: rise .35s var(--out); }
+  @keyframes rise { from { opacity: 0; transform: translateY(6px); } }
+  h1 { font: 500 24px/1.15 system-ui; letter-spacing: -.02em; margin: 0 0 4px; }
+  p.lede { color: var(--fg2); margin: 0 0 20px; line-height: 1.45; }
+  h3 { font: 500 11px system-ui; text-transform: uppercase; letter-spacing: .04em; color: var(--fg3); margin: 22px 4px 7px; }
+
+  .group { background: var(--card); border-radius: 11px; box-shadow: inset 0 0 0 .5px var(--line), 0 1px 2px rgba(0,0,0,.03); }
+  .row { display: flex; align-items: center; gap: 14px; min-height: 44px; padding: 8px 14px; box-sizing: border-box; }
+  .row + .row { box-shadow: inset 0 .5px 0 var(--line); }
+  .row .t { flex: 1; min-width: 0; } .row .t b { display: block; font-weight: 500; }
+  .row .t span { display: block; color: var(--fg3); font-size: 11.5px; margin-top: 2px; line-height: 1.35; }
+
+  /* switch */
+  .sw { position: relative; width: 38px; height: 22px; flex: none; }
+  .sw input { appearance: none; margin: 0; width: 100%; height: 100%; border-radius: 11px; background: var(--track);
+    transition: background .2s var(--ease); cursor: pointer; }
+  .sw input:checked { background: var(--green); }
+  .sw input::after { content: ""; position: absolute; top: 2px; left: 2px; width: 18px; height: 18px; border-radius: 50%; background: #fff;
+    box-shadow: 0 1px 3px rgba(0,0,0,.25); transition: transform .22s var(--out); }
+  .sw input:checked::after { transform: translateX(16px); }
+  .sw input:focus-visible { outline: 3px solid rgba(10,132,255,.45); outline-offset: 2px; }
+
+  /* segmented */
+  .seg { display: inline-flex; padding: 2px; border-radius: 8px; background: var(--track); flex: none; }
+  .seg button { all: unset; padding: 4px 11px; border-radius: 6px; font-size: 12px; color: var(--fg); transition: background .2s, box-shadow .2s; }
+  .seg button.on { background: var(--card); box-shadow: 0 1px 3px rgba(0,0,0,.15), inset 0 0 0 .5px var(--line); }
+  @media (prefers-color-scheme: dark) { .seg button.on { background: #636366; } }
+  .seg button:focus-visible { outline: 2px solid rgba(10,132,255,.5); }
+  .shortcut + .group { margin-top: 12px; }
+
+  select { font: 13px system-ui; color: var(--fg); background: var(--card); border: 0; border-radius: 6px; padding: 3px 6px;
+    box-shadow: inset 0 0 0 .5px var(--line), 0 1px 1px rgba(0,0,0,.05); }
+  input[type=range] { width: 150px; accent-color: var(--accent); }
+  .val { width: 44px; text-align: right; color: var(--fg2); font-variant-numeric: tabular-nums; }
+
+  /* the shortcut: big keycaps, one button to record a new one */
+  .shortcut { display: flex; flex-direction: column; align-items: center; gap: 14px; padding: 26px 16px 18px; border-radius: 11px;
+    background: var(--card); box-shadow: inset 0 0 0 .5px var(--line); transition: box-shadow .25s; }
+  .shortcut.rec { box-shadow: inset 0 0 0 2px var(--accent), 0 0 0 4px rgba(10,132,255,.15); }
+  .caps { display: flex; gap: 7px; min-height: 40px; align-items: center; }
+  .caps .cap { min-width: 40px; height: 40px; font-size: 16px; border-radius: 9px; padding: 0 12px; }
+  .caps .cap.wide { min-width: 96px; font-size: 14px; }
+  .caps .hint { color: var(--fg2); font-size: 14px; animation: blink 1.4s ease-in-out infinite; }
+  @keyframes blink { 50% { opacity: .45; } }
+  .shortcut .acts { display: flex; gap: 8px; align-items: center; }
+  .shortcut small { color: var(--fg3); font-size: 11.5px; } .shortcut small.warn { color: #ff9f0a; }
+  .cap { min-width: 26px; height: 26px; padding: 0 7px; box-sizing: border-box; border-radius: 6px; display: grid; place-items: center;
+    font: 500 12px system-ui; background: linear-gradient(#fdfdfd, #e8e8ed); color: #1d1d1f;
+    box-shadow: 0 0 0 .5px rgba(0,0,0,.16), 0 1.5px 0 rgba(0,0,0,.16); }
+  @media (prefers-color-scheme: dark) { .cap { background: linear-gradient(#48484a, #3a3a3c); color: #f5f5f7;
+    box-shadow: 0 0 0 .5px rgba(0,0,0,.6), 0 1.5px 0 rgba(0,0,0,.6); } }
+
+  /* buttons */
+  .btn { all: unset; height: 26px; padding: 0 12px; border-radius: 7px; font-size: 12.5px; font-weight: 500; flex: none;
+    background: var(--card); box-shadow: inset 0 0 0 .5px var(--line), 0 1px 1px rgba(0,0,0,.05); transition: filter .15s, transform .1s; }
+  .btn:hover { filter: brightness(1.06); } .btn:active { transform: scale(.97); }
+  .btn.blue { background: var(--accent); color: #fff; box-shadow: none; }
+  .btn.red { color: #ff453a; }
+  .btn:focus-visible { outline: 2px solid rgba(10,132,255,.5); }
+
+  /* usage */
+  .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  .stat { background: var(--card); border-radius: 11px; padding: 14px; box-shadow: inset 0 0 0 .5px var(--line); }
+  .stat small { color: var(--fg3); font-size: 11px; text-transform: uppercase; letter-spacing: .04em; font-weight: 500; }
+  .stat b { display: block; font: 500 24px system-ui; letter-spacing: -.02em; margin: 6px 0 2px; font-variant-numeric: tabular-nums; }
+  .stat span { color: var(--fg2); font-size: 12px; }
+
+  /* memory */
+  .rule { display: flex; align-items: center; gap: 10px; }
+  .rule .t { color: var(--fg); }
+  .x { all: unset; width: 22px; height: 22px; border-radius: 11px; display: grid; place-items: center; color: var(--fg3); font-size: 15px; }
+  .x:hover { background: var(--sel); color: #ff453a; }
+  .add { display: flex; gap: 8px; padding: 10px 14px; box-shadow: inset 0 .5px 0 var(--line); }
+  .add input { flex: 1; font: 13px system-ui; color: var(--fg); background: transparent; border: 0; outline: 0; }
+  .field:focus, .add input:focus { box-shadow: 0 0 0 3px rgba(10,132,255,.35); border-radius: 4px; }
+  .app:hover, .seg button:not(.on):hover { background: var(--sel); }
+  .empty { padding: 14px; color: var(--fg3); }
+  .field { flex: 1; font: 13px system-ui; color: var(--fg); background: transparent; border: 0; outline: 0; text-align: right; min-width: 0; }
+  .field::placeholder, textarea::placeholder { color: var(--fg3); }
+  textarea.field { text-align: left; resize: none; height: 56px; line-height: 1.4; padding: 0; font: 13px system-ui; }
+  .count { color: var(--fg3); font-size: 11px; font-variant-numeric: tabular-nums; flex: none; }
+  #facts .row { box-shadow: inset 0 .5px 0 var(--line); }
+
+  .status { display: flex; align-items: center; gap: 8px; }
+  .dot { width: 8px; height: 8px; border-radius: 4px; background: var(--green); flex: none; }
+  .dot.bad { background: #ff9f0a; }
+
+  [hidden] { display: none !important; }   /* .btn's all: unset would undo it */
+
+  /* apps */
+  .appbar { display: flex; gap: 8px; margin-bottom: 4px; position: sticky; top: -40px; padding: 8px 0; z-index: 1; }
+  .search { flex: 1; height: 28px; padding: 0 10px; border: 0; border-radius: 7px; font: 13px system-ui; color: var(--fg); outline: 0;
+    background: var(--card); box-shadow: inset 0 0 0 .5px var(--line), 0 1px 1px rgba(0,0,0,.05); }
+  .search:focus { box-shadow: inset 0 0 0 .5px var(--line), 0 0 0 3px rgba(10,132,255,.35); }
+  .appbar .btn { height: 28px; } .appbar .seg { align-self: center; }
+  .btn.stop { background: #ff453a; } .btn:disabled { opacity: .45; pointer-events: none; }
+  h3 .all { all: unset; float: right; color: var(--accent); text-transform: none; letter-spacing: 0; font-weight: 500; font-size: 11.5px; cursor: pointer; }
+  .app { min-height: 46px; cursor: pointer; } .app img { width: 30px; height: 30px; flex: none; }
+  .app .t b { font-weight: 400; }
+  .ck { appearance: none; margin: 0; width: 20px; height: 20px; border-radius: 50%; flex: none; cursor: pointer;
+    box-shadow: inset 0 0 0 1.5px var(--track); transition: background .15s, box-shadow .15s; }
+  .ck:checked { background: var(--accent) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Cpath d='M5.5 10.5l3 3 6-7' fill='none' stroke='white' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center/20px; box-shadow: none; }
+  .ck:focus-visible { outline: 3px solid rgba(10,132,255,.45); outline-offset: 2px; }
+  .pill { font-size: 11.5px; font-weight: 500; padding: 3px 9px; border-radius: 10px; flex: none; }
+  .pill.ok { color: var(--green); background: rgba(52,199,89,.13); }
+  .pill.no { color: #ff9f0a; background: rgba(255,159,10,.14); cursor: pointer; }
+  .pill.wait { color: var(--fg2); background: var(--sel); animation: blink 1.2s ease-in-out infinite; }
+  p.note { color: var(--fg3); font-size: 11.5px; line-height: 1.45; margin: 14px 4px 0; }
+  p.note a { color: var(--accent); cursor: pointer; }
+
+  .about { display: flex; flex-direction: column; align-items: center; text-align: center; padding: 10px 0 6px; }
+  .about img { width: 96px; height: 96px; margin-bottom: 8px; }
+  .about h1 { margin: 0; } .about p { color: var(--fg2); margin: 4px 0 0; }
+
+  /* Silly UI system: local-only type and component tokens. */
+  @font-face { font-family: "Satoshi"; src: url("assets/fonts/Satoshi-Variable.ttf") format("truetype"); font-style: normal; font-weight: 300 500; font-display: swap; }
+  :root { --bg: #171720; --surface: #20202c; --surface-raised: #292938; --text: #f1f1f6; --muted: #aaaabb; --subtle: #777788; --border: rgba(255,255,255,.09); --focus: #83b4ff; --accent: #6d9dff; --silly-font: "Satoshi", system-ui, sans-serif; --wa-font-family-body: var(--silly-font); --wa-font-family-heading: var(--silly-font); }
+  html, body { background: var(--bg); color: var(--text); font-family: var(--silly-font); font-weight: 400; letter-spacing: -.01em; }
+  *, *::before, *::after { font-family: inherit; }
+  main { min-width: 0; background: var(--bg); padding: 42px 42px 54px; scrollbar-width: none; }
+  main::-webkit-scrollbar, .fill::-webkit-scrollbar { display: none; }
+  nav { background: #1b1b25; box-shadow: inset -1px 0 0 var(--border); padding: 38px 12px 16px; }
+  nav button { height: 36px; border-radius: 9px; font-size: 13px; font-weight: 400; }
+  nav button.on { background: rgba(109,157,255,.16); color: #dce8ff; }
+  .ni { background: transparent !important; width: 20px; height: 20px; color: var(--muted); }
+  nav button.on .ni { color: var(--accent); } .ni img { width: 18px; height: 18px; opacity: .72; filter: invert(80%) sepia(9%) saturate(508%) hue-rotate(202deg); } nav button.on .ni img { opacity: 1; filter: invert(72%) sepia(38%) saturate(712%) hue-rotate(185deg); }
+  section { max-width: 620px; } h1 { font: 500 28px/1.12 "Satoshi", system-ui, sans-serif; letter-spacing: -.025em; margin-bottom: 8px; }
+  h3 { font: 500 11px/1.2 "Satoshi", system-ui, sans-serif; letter-spacing: .06em; margin: 28px 2px 9px; }
+  p.lede { max-width: 560px; color: var(--muted); line-height: 1.55; margin-bottom: 24px; }
+  .group { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; box-shadow: none; overflow: visible; }
+  .row { min-width: 0; min-height: 54px; padding: 11px 16px; gap: 16px; flex-wrap: wrap; } .row .t { min-width: min(100%, 220px); } .row .t b { font-weight: 500; } .row .t span { overflow-wrap: anywhere; color: var(--muted); font-size: 12px; line-height: 1.45; }
+  .btn { height: 30px; border-radius: 8px; background: var(--surface-raised); box-shadow: inset 0 0 0 1px var(--border); font-weight: 500; }
+  .btn.blue { background: var(--accent); color: #101522; } .btn.red { color: #ff9b93; }
+  button, input, textarea, select, kbd, .btn, .cap, .seg button, nav button, .x, .field, .add input, .search { font-family: var(--silly-font); font-weight: inherit; }
+  .btn, .cap, .seg button, nav button, .x, h3 .all { font-weight: 500; letter-spacing: -.012em; }
+  wa-select, wa-option {
+    font-family: var(--silly-font);
+    --wa-font-family-body: var(--silly-font);
+    --wa-font-family-heading: var(--silly-font);
+    --wa-color-text-normal: var(--text);
+    --wa-color-text-quiet: var(--muted);
+    --wa-color-neutral-on-normal: var(--text);
+    --wa-color-neutral-on-quiet: var(--text);
+    --wa-color-brand-on-loud: #101522;
+    --wa-color-neutral-fill-normal: rgba(109,157,255,.16);
+    --wa-color-neutral-fill-quiet: rgba(109,157,255,.12);
+    --wa-form-control-value-color: var(--text);
+    --wa-form-control-placeholder-color: var(--muted);
+    --wa-form-control-activated-color: var(--accent);
+  }
+  wa-select {
+    min-width: 144px;
+    max-width: 220px;
+    --wa-color-neutral-0: var(--surface-raised);
+    --wa-color-neutral-50: var(--surface-raised);
+    --wa-color-neutral-100: #303042;
+    --wa-color-neutral-600: var(--muted);
+    --wa-color-neutral-700: var(--text);
+    --wa-color-neutral-900: var(--text);
+    --wa-color-brand-fill-loud: var(--accent);
+    --wa-focus-ring-color: var(--focus);
+    --wa-form-control-background-color: var(--surface-raised);
+  }
+  wa-select::part(combobox) { min-height: 32px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-raised); color: var(--text); box-shadow: none; }
+  wa-select::part(listbox) { z-index: 1000; max-height: 260px; overflow-y: auto; border: 1px solid var(--border); border-radius: 10px; background: #2b2b3a; color: var(--text); box-shadow: 0 16px 36px rgba(0,0,0,.35); }
+  wa-select::part(display-input) { color: var(--text); }
+  wa-option { min-height: 34px; padding-inline: 11px; font-size: 13px; color: var(--text); }
+  wa-option:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+  @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; scroll-behavior: auto !important; } }
+</style></head><body>
+
+<nav>
+  <div class="me"><img id="icon" alt=""><div><b>Silly</b><span>Just ask.</span></div></div>
+  <button data-s="general" class="on"><i class="ni"><img src="vendor/lucide/icons/settings.svg" alt=""></i>General</button>
+  <button data-s="sound"><i class="ni"><img src="vendor/lucide/icons/volume-2.svg" alt=""></i>Sound</button>
+  <button data-s="brain"><i class="ni"><img src="vendor/lucide/icons/brain.svg" alt=""></i>Intelligence</button>
+  <button data-s="screen"><i class="ni"><img src="vendor/lucide/icons/monitor.svg" alt=""></i>Screen &amp; Windows</button>
+  <button data-s="memory"><i class="ni"><img src="vendor/lucide/icons/bookmark.svg" alt=""></i>Memory</button>
+  <button data-s="usage"><i class="ni"><img src="vendor/lucide/icons/bar-chart-3.svg" alt=""></i>Usage</button>
+  <button data-s="apps"><i class="ni"><img src="vendor/lucide/icons/grid-2x2.svg" alt=""></i>Apps</button>
+  <button data-s="account"><i class="ni"><img src="vendor/lucide/icons/user-round.svg" alt=""></i>Account &amp; Access</button>
+  <button data-s="lab"><i class="ni"><img src="vendor/lucide/icons/flask-conical.svg" alt=""></i>Experimental</button>
+  <button data-s="about"><i class="ni"><img src="vendor/lucide/icons/download.svg" alt=""></i>About &amp; Updates</button>
+  <div class="spacer"></div>
+  <div class="ver" id="ver"></div>
+</nav>
+
+<main>
+  <section id="general" class="on">
+    <h1>General</h1>
+    <p class="lede">Your shortcut. Your way to talk.</p>
+    <style>nav button[data-s="apps"], #apps { display: none !important; }</style>
+    <h3>Shortcut</h3>
+    <div class="shortcut" id="shortcut">
+      <div class="caps" id="caps" aria-live="polite"></div>
+      <small id="schint">Hold it, talk, let go.</small>
+      <div class="acts"><button class="btn blue" id="change">Change Shortcut</button><button class="btn" data-do="resetHotkey" id="reset">Use Default</button></div>
+    </div>
+    <div class="group">
+      <div class="row"><div class="t"><b id="talklabel">Shortcut behavior</b><span id="talkhint">Hold to listen. Release to send.</span></div><div class="seg" data-k="talkMode" role="group" aria-labelledby="talklabel"><button data-v="hold">Hold to talk</button><button data-v="toggle">Press to toggle</button></div></div>
+      <div class="row"><div class="t"><span>While answering, press the shortcut to stop. Esc cancels without sending.</span></div></div>
+    </div>
+    <h3>Silly</h3>
+    <div class="group">
+      <div class="row"><div class="t"><b>Open at login</b><span>Ready the moment Windows is.</span></div><label class="sw"><input type="checkbox" data-k="login"></label></div>
+      <div class="row"><div class="t"><b>Pause Silly</b><span>The shortcut does nothing until you turn this off.</span></div><label class="sw"><input type="checkbox" data-k="paused"></label></div>
+      <div class="row"><div class="t"><b>Show in the taskbar tray</b><span>Hidden? Open Silly from the Start menu to get back here.</span></div><label class="sw"><input type="checkbox" data-k="menuIcon"></label></div>
+    </div>
+    <h3>Answers</h3>
+    <div class="group">
+      <div class="row"><div class="t"><b>Read answers aloud</b><span>Speaks confirmed results only. Press Esc or the shortcut to stop.</span></div><label class="sw"><input type="checkbox" data-k="speak"></label></div>
+      <div class="row"><div class="t"><b>Spoken reply</b><span>Brief acknowledgements are faster; Full reads the whole AI answer.</span></div><div class="seg" data-k="speechReplyMode"><button data-v="brief">Brief</button><button data-v="full">Full</button></div></div>
+      <div class="row"><div class="t"><b>Copy answers automatically</b><span>Every answer lands on your clipboard, ready to paste.</span></div><label class="sw"><input type="checkbox" data-k="autoCopy"></label></div>
+      <div class="row"><div class="t"><b>Tips</b><span>Once in a while, a small tip under the answer. After a miss, how to teach Silly to do it right.</span></div><label class="sw"><input type="checkbox" data-k="tips"></label></div>
+      <div class="row"><div class="t"><b>Ask me when unsure</b><span>When more than one thing fits, Silly shows you the choices in the box instead of guessing.</span></div><label class="sw"><input type="checkbox" data-k="askMe"></label></div>
+    </div>
+    <h3>The answer box</h3>
+    <div class="group">
+      <div class="row"><div class="t"><b>Start in</b><span>What the shortcut opens. Hover the box to type anyway, or click the mic to talk.</span></div><div class="seg" data-k="input"><button data-v="voice">Voice</button><button data-v="type">Typing</button></div></div>
+      <div class="row"><div class="t"><b>Position</b></div><div class="seg" data-k="corner"><button data-v="top-left">Top left</button><button data-v="top-right">Top right</button></div></div>
+      <div class="row"><div class="t"><b>Keep answers on screen</b><span>How long an answer stays before the box fades. Drag the box’s bottom-right corner to resize it.</span></div><div class="seg" data-k="linger"><button data-v="short">Short</button><button data-v="normal">Normal</button><button data-v="long">Long</button></div></div>
+    </div>
+  </section>
+
+  <section id="sound">
+    <h1>Sound</h1>
+    <p class="lede">Small cues so you know Silly heard you, without looking.</p>
+    <h3>Speech recognition</h3>
+    <div class="group">
+      <div class="row"><div class="t"><b>Transcription provider</b><span>Local Whisper keeps microphone audio on this PC. Gnani Cloud sends microphone audio to Gnani for transcription.</span></div><div class="seg" data-k="speechProvider"><button data-v="local">Local Whisper</button><button data-v="gnani">Gnani Cloud</button></div></div>
+      <div class="row"><div class="t"><b>Gnani language</b><span>Select Gnani’s transcription language. For Hinglish, choose the language that best matches the command; Silly does not silently rewrite mixed-language words.</span></div><wa-select data-k="gnaniLanguage" data-option-key="speechLanguages" aria-label="Gnani language"></wa-select></div>
+      <div class="row"><div class="t"><b>Command end pause</b><span>Short is quicker for commands; long is better for dictation and natural pauses.</span></div><div class="seg" data-k="gnaniMinSilence"><button data-v="350">Short</button><button data-v="700">Long</button></div></div>
+      <div class="row"><div class="t"><b>Gnani vocabulary</b><span>Optional single words: YouTube, Chrome, Raftaar, Silly, ChatGPT. Up to 100; sent only with Gnani Cloud.</span></div><input class="field" data-k="gnaniVocabulary" placeholder="YouTube, Raftaar, Silly"></div>
+      <div class="row"><div class="t"><b>Vocabulary strength</b></div><wa-select data-k="gnaniVocabularyStrength" data-option-key="vocabularyStrengths" aria-label="Vocabulary strength"></wa-select></div>
+      <div class="row"><div class="t"><b>Cloud fallback</b><span>If Gnani cannot connect or has no quota, use the installed local Whisper model when available.</span></div><div class="seg" data-k="cloudFallback"><button data-v="local">Local Whisper</button><button data-v="none">Show error</button></div></div>
+    </div>
+    <h3>Speech output</h3>
+    <div class="group">
+      <div class="row"><div class="t"><b>Voice provider</b><span>Gnani Cloud sends response text to Gnani. Windows local speech works offline.</span></div><div class="seg" data-k="ttsProvider"><button data-v="windows">Windows local</button><button data-v="gnani">Gnani Cloud</button></div></div>
+      <div class="row"><div class="t"><b>Gnani API key</b><span>Saved only in Windows Credential Manager, never in Silly settings.</span></div><input id="gnaniKey" class="field" type="password" autocomplete="off" placeholder="Paste to save or leave empty"></div>
+      <div class="row"><div class="t"><b>Gnani model</b><span>The voice list follows the selected model.</span></div><wa-select data-k="gnaniTtsModel" data-option-key="ttsModels" aria-label="Gnani model"></wa-select></div>
+      <div class="row"><div class="t"><b>Gnani voice</b><span>Choose a voice compatible with the selected model.</span></div><wa-select data-k="gnaniTtsVoice" aria-label="Gnani voice"></wa-select></div>
+      <div class="row"><div class="t"><b>Gnani language and speed</b><span>Use auto for mixed Indian-language text, including Hinglish.</span></div><wa-select data-k="gnaniTtsLanguage" data-option-key="ttsLanguages" aria-label="Gnani TTS language"></wa-select><input type="range" min="0.85" max="1.15" step="0.05" data-k="gnaniTtsSpeed"><span class="val" id="ttsspeed"></span></div>
+      <div class="row"><div class="t"><b>Fallback to Windows local</b><span>Shows when Gnani fails; it never changes the claimed provider.</span></div><label class="sw"><input type="checkbox" data-k="ttsFallback"></label></div>
+      <div class="row"><div class="t"><b>Test selected Gnani voice</b><span id="voiceTest">Runs one short, explicit cloud request with the selected model, voice, language, and speed.</span></div><button class="btn" data-do="testGnaniVoice">Test voice</button></div>
+    </div>
+    <h3>Voice diagnostics</h3>
+    <div class="group"><div class="row"><div class="t"><b id="voiceDiag">Loading voice status…</b><span id="voiceDiagDetail"></span></div></div></div>
+    <h3>Audio feedback</h3>
+    <div class="group">
+      <div class="row"><div class="t"><b>When it starts listening</b></div><wa-select data-k="soundStart" aria-label="Start sound"></wa-select></div>
+      <div class="row"><div class="t"><b>When an answer is ready</b></div><wa-select data-k="soundDone" aria-label="Answer-ready sound"></wa-select></div>
+      <div class="row"><div class="t"><b>When you stop it</b><span>Esc, or the keys again.</span></div><wa-select data-k="soundStop" aria-label="Stop sound"></wa-select></div>
+      <div class="row"><div class="t"><b>Volume</b></div><input type="range" min="0" max="0.6" step="0.02" data-k="volume"><span class="val" id="volv"></span></div>
+    </div>
+  </section>
+
+  <section id="brain">
+    <h1>Reasoning</h1>
+    <p class="lede">Apps, search, and windows stay local. These connections answer the questions that need reasoning.</p>
+    <h3>Connections</h3>
+    <div class="group">
+      <div class="row"><div class="t"><b>Use for answers</b><span>Choose the connected account Silly tries first. A backup is used once only if the first account is unavailable before an answer starts.</span></div><wa-select data-k="aiPrimary" data-option-key="aiPrimary" aria-label="Primary reasoning provider"></wa-select></div>
+      <div class="row"><div class="t"><b>Backup</b><span>Never repeats an answer or an action after work has started.</span></div><wa-select data-k="aiBackup1" data-option-key="aiBackup" aria-label="Reasoning backup"></wa-select></div>
+      <div class="row"><div class="t"><b>Free-only protection</b><span>Only use an account you explicitly confirm has no additional charge for the selected route.</span></div><label class="sw"><input type="checkbox" data-k="aiFreeOnly" aria-label="Free-only protection"></label></div>
+      <div class="row"><div class="t"><b>Claude subscription included</b><span>Confirm this only after reviewing your Claude Code subscription limits.</span></div><label class="sw"><input type="checkbox" data-k="aiClaudeSubscriptionNoCharge" aria-label="Claude subscription no additional charge"></label></div>
+    </div>
+    <h3>ChatGPT plan</h3>
+    <div class="group">
+      <div class="row"><div class="t"><b>Connection</b><span id="chatgptStatus">Not connected. ChatGPT decides eligibility and included use.</span></div><button class="btn blue" data-do="connectChatGPT">Connect</button><button class="btn" data-do="disconnectChatGPT">Disconnect</button><button class="btn" data-do="testChatGPT">Test request</button></div>
+      <div class="row" id="chatgptModelRow" hidden><div class="t"><b>Model</b><span>Only models returned for the connected account are selectable.</span></div><wa-select id="chatgptModels" data-k="aiOpenAIModel" placeholder="Connect first" aria-label="ChatGPT model"></wa-select><button class="btn" data-do="refreshChatGPTModels">Refresh</button></div>
+    </div>
+    <h3 id="claudeModelHeading">Claude Code model</h3>
+    <div class="group" id="claudeOptions">
+      <div class="row"><div class="t"><b>Claude model</b><span id="modelwhy"></span></div><div class="seg" data-k="model"><button data-v="haiku">Haiku</button><button data-v="sonnet">Sonnet</button><button data-v="opus">Opus</button></div><button class="btn" data-do="testClaude">Test request</button></div>
+      <div class="row"><div class="t"><b>Offer Sonnet when stuck</b><span>If a task fails on Haiku, Silly asks to try that one task again with Sonnet. Your other asks stay on Haiku.</span></div><label class="sw"><input type="checkbox" data-k="escalate"></label></div>
+      <div class="row"><div class="t"><b>Without asking</b><span>Retry with Sonnet right away. Slower and uses more of your plan, only when a task fails.</span></div><label class="sw"><input type="checkbox" data-k="escalateAuto"></label></div>
+    </div>
+    <h3>Speed</h3>
+    <div class="group">
+      <div class="row"><div class="t"><b>Instant commands</b><span>Opening apps, moving windows, searches and music run locally with no AI.</span></div><label class="sw"><input type="checkbox" data-k="instant"></label></div>
+      <div class="row"><div class="t"><b>Act while I’m talking</b><span>With Instant commands on, supported commands run mid-sentence. Learned shortcuts wait for confirmed words.</span></div><label class="sw"><input type="checkbox" data-k="live"></label></div>
+      <div class="row"><div class="t"><b>Learn commands</b><span>Saves successful steps automatically. Stable shortcuts run without AI; app workflows reuse saved procedures with fresh checks.</span></div><label class="sw"><input type="checkbox" data-k="learn"></label></div>
+      <div class="row"><div class="t"><b>Start while I’m talking</b><span>Starts thinking during a pause. AI tools wait until you send and your words are confirmed.</span></div><label class="sw"><input type="checkbox" data-k="ahead"></label></div>
+      <div class="row"><div class="t"><b>Pause before starting</b><span>Shorter is faster. Longer waits more if you pause mid-sentence.</span></div><input type="range" min="0.4" max="1.5" step="0.1" data-k="aheadDelay"><span class="val" id="delayv"></span></div>
+    </div>
+  </section>
+
+  <section id="screen">
+    <h1>Screen &amp; Windows</h1>
+    <p class="lede">What Silly can see, and where things open.</p>
+    <div class="group">
+      <div class="row"><div class="t"><b>Look at my screen</b><span>Automatic: only when you say “this”, “my screen”, “this page” and the like. Pictures stay on your PC until sent with that one ask.</span></div><div class="seg" data-k="screen"><button data-v="auto">Automatic</button><button data-v="never">Never</button></div></div>
+      <div class="row"><div class="t"><b>Hidden from screen sharing</b><span>On Zoom, Meet or a recording, others see your screen but never the Silly box. Silly’s own screenshots leave it out too.</span></div></div>
+      <div class="row"><div class="t"><b>Open apps on</b><span>The other screen keeps you where you are, but takes a second or two longer.</span></div><div class="seg" data-k="openOn"><button data-v="here">This screen</button><button data-v="other">Other screen</button></div></div>
+    </div>
+  </section>
+
+  <section id="memory">
+    <h1>Memory</h1>
+    <h3>About you</h3>
+    <div class="group">
+      <div class="row"><div class="t"><b>Name</b></div><input class="field" id="myname" maxlength="40" placeholder="What should Silly call you?" aria-label="Your name"></div>
+      <div class="row" style="align-items:flex-start"><div class="t" style="flex:none;width:120px"><b>A line about you</b><span>Sent with every ask, so keep it short.</span></div><textarea class="field" id="myabout" maxlength="200" placeholder="Student in Chicago. Uses Safari and Spotify." aria-label="About you"></textarea><span class="count" id="abcount"></span></div>
+      <div class="row"><div class="t"><b>Learn about me</b><span>Picks up lasting facts you mention (your city, your apps), 8 at most. Never health, money or passwords.</span></div><label class="sw"><input type="checkbox" data-k="learnMe"></label></div>
+      <div id="facts"></div>
+    </div>
+    <p class="lede" style="margin:8px 4px 0;font-size:11.5px">All of this together stays under 300 characters, about 0.008¢ an ask.</p>
+    <h3>Rules</h3>
+    <div class="group" id="rules"></div>
+    <p class="lede" style="margin:8px 4px 0;font-size:11.5px">Say “remember…” or “from now on…”, or add one here. Only rules that match what you ask are sent, so more rules don’t cost more.</p>
+    <h3>Saved commands and procedures</h3>
+    <div class="group" id="skills"></div>
+  </section>
+
+  <section id="usage">
+    <h1>Usage</h1>
+    <p class="lede">What Silly has cost, priced at Claude API list rates. On a Claude plan it comes out of your plan’s usage, not your wallet.</p>
+    <div class="stats" id="stats"></div>
+    <h3>History</h3>
+    <div class="group">
+      <div class="row"><div class="t"><b>Ask log</b><span>Completed requests, answers and cost. Live commands are marked; instant actions cost $0.</span></div><button class="btn" data-do="openLog">Open</button></div>
+      <div class="row"><div class="t"><b>Forget this conversation</b><span>Follow-ups like “open the second one” start fresh.</span></div><button class="btn red" data-do="clearRecent">Forget</button></div>
+    </div>
+  </section>
+
+  <section id="apps">
+    <h1>Apps</h1>
+    <p class="lede">Tick the apps Silly can control. macOS asks once for each one, so allow them all now and Silly won’t stop to ask later.</p>
+    <div class="appbar"><div class="seg" id="appview"><button data-v="key" class="on">Key Apps</button><button data-v="all">All Apps</button></div>
+      <input id="appq" class="search" placeholder="Search all apps" aria-label="Search all apps"><button class="btn blue" id="allow" disabled>Allow</button></div>
+    <div id="applist"><div class="group"><div class="empty">Finding your apps…</div></div></div>
+    <p class="note">Silly opens each app out of sight, asks, and closes it again. Click OK on each macOS box.<br>
+      Using an app that isn’t ticked? macOS asks the first time, and it shows up here as allowed.
+      To take access away: System Settings → Privacy &amp; Security → Automation. <a data-do="automation">Open it</a></p>
+  </section>
+
+  <section id="account">
+    <h1>Account &amp; Access</h1>
+    <p class="lede">What Silly needs to work.</p>
+    <div class="group">
+      <div class="row"><div class="t"><b>Claude</b><span class="status"><i class="dot" id="pdot"></i><span id="ptext">Checking…</span></span></div><button class="btn" data-do="setup" id="pbtn">Set Up</button></div>
+    </div>
+    <h3>Safety</h3>
+    <div class="group">
+      <div class="row"><div class="t"><b>Safe mode</b><span>Deletes, sends, purchases, file changes and system commands wait for your Allow. (Windows has no sandbox for Claude Code, so this check is the whole of safe mode.)</span></div><label class="sw"><input type="checkbox" data-k="safe"></label></div>
+      <div class="row"><div class="t"><b>Count me as a user</b><span>Once a day, sends a random ID so the maker knows how many people use Silly. Never your name, your asks or your screen.</span></div><label class="sw"><input type="checkbox" data-k="stats"></label></div>
+    </div>
+    <h3>Permissions</h3>
+    <div class="group" id="perms">
+      <div class="row"><div class="t"><b>Microphone</b><span>Hears you while you hold the keys.</span></div><span class="pill ok">Allowed</span><button class="btn" data-g="mic">Allow</button></div>
+      <div class="row"><div class="t"><b>Speech Recognition</b><span>Whisper turns your words into text on this PC (a one-time ~150 MB download).</span></div><span class="pill ok">Ready</span><button class="btn" data-g="speech">Download</button></div>
+      <div class="row"><div class="t"><b>Screen Recording</b><span>Looks at your screen when you say “this”.</span></div><span class="pill ok">Allowed</span><button class="btn" data-g="screen">Allow</button></div>
+    </div>
+    <h3>Silly</h3>
+    <div class="group">
+      <div class="row"><div class="t"><b>Quit Silly</b><span>Open it again from the Start menu.</span></div><button class="btn red" data-do="quit">Quit</button></div>
+    </div>
+  </section>
+
+  <section id="lab">
+    <h1>Experimental</h1>
+    <p class="lede">New ideas, still rough. Turn them on and see what you think.</p>
+    <div class="group">
+      <div class="row"><div class="t"><b>Show me where</b><span>Ask “where’s the dark mode setting?” or “how do I share this?” and a ring lights up the spot on your screen.</span></div><label class="sw"><input type="checkbox" data-k="pointer"></label></div>
+    </div>
+  </section>
+
+  <section id="about">
+    <div class="about"><img id="bigicon" alt=""><h1>Silly</h1><p id="aboutver"></p></div>
+    <h3>Updates</h3>
+    <div class="group">
+      <div class="row"><div class="t"><b>Update automatically</b><span>Checks every few hours. New versions install in the background and Silly restarts when you’re not using it.</span></div><label class="sw"><input type="checkbox" data-k="autoUpdate"></label></div>
+      <div class="row"><div class="t"><b>Check for updates</b><span id="upstatus">Never checked this session.</span></div><button class="btn" data-do="checkUpdate">Check Now</button></div>
+    </div>
+    <h3>Silly</h3>
+    <div class="group">
+      <div class="row"><div class="t"><b>Source code</b><span>Open source on GitHub.</span></div><button class="btn" data-do="github">Open</button></div>
+    </div>
+  </section>
+</main>
+
+<script>
+  const $ = id => document.getElementById(id);
+  const post = m => window.webkit?.messageHandlers.st.postMessage(m);
+  let P = {};
+  let TTS_CATALOG = {};
+  let OPTION_SETS = {};
+  const shortcutHint = () => P.input === 'type' ? 'Press to type. Return sends.' : P.talkMode === 'toggle' ? 'Press to listen. Press again to send.' : 'Hold it, talk, let go. Hover the box to type.';
+  const set = (k, v) => { P[k] = v; post({ do: 'set', k, v }); paint(); };
+
+  document.querySelectorAll('nav button').forEach(b => b.onclick = () => {
+    cancelRecord();
+    document.querySelectorAll('nav button, section').forEach(e => e.classList.remove('on'));
+    b.classList.add('on'); $(b.dataset.s).classList.add('on');
+    if (b.dataset.s === 'apps') post({ do: 'apps' });
+  });
+  document.querySelectorAll('[data-do]').forEach(b => b.onclick = () => post({ do: b.dataset.do }));
+
+  // The host records the keys; the label is like "⌃⌥Space" (modifier symbols, then the key)
+  const capsOf = label => label.includes('+') || /^[A-Z]/.test(label) ? label.split('+') : (m => [...m[1]].concat(m[2] ? [m[2]] : []))(label.match(/^([⌃⌥⇧⌘]*)(.*)$/));
+  const showCaps = (label, hint) => $('caps').innerHTML = capsOf(label).map(c => `<i class="cap${c.length > 2 ? ' wide' : ''}">${c}</i>`).join('')
+    + (hint ? `<span class="hint">${hint}</span>` : '');
+  let recording = false;
+  $('change').onclick = () => {
+    if (recording) return cancelRecord();
+    recording = true; $('shortcut').classList.add('rec'); $('change').textContent = 'Cancel Recording';
+    showCaps('', 'Recording — press your shortcut'); $('schint').textContent = 'Use modifiers with a key, or an F-key. Esc or click away to cancel.'; $('schint').className = '';
+    post({ do: 'record' });
+  };
+
+  const cancelRecord = () => {
+    if (!recording) return;
+    recording = false; $('shortcut').classList.remove('rec'); $('change').textContent = 'Change Shortcut';
+    $('schint').className = ''; paint(); post({ do: 'cancelRecord' });
+  };
+  document.addEventListener('pointerdown', e => { if (!e.target.closest('#change')) cancelRecord(); });
+
+  let SOUNDS = [{value: 'None', label: 'No sound'}];
+  let PROVIDERS = {};
+  const options = values => Array.isArray(values) ? values.map(item => typeof item === 'string' ? {value:item,label:item} : item).filter(item => typeof item?.value === 'string' && typeof item?.label === 'string') : [];
+  const setOptions = (select, values) => {
+    select.replaceChildren(...options(values).map(({value, label}) => {
+      const option = document.createElement('wa-option');
+      option.value = value;
+      option.textContent = label;
+      return option;
+    }));
+    const selected = P[select.dataset.k] ?? '';
+    customElements.whenDefined('wa-select').then(() => setTimeout(() => { select.value = selected; }, 0));
+  };
+  const fillSounds = () => document.querySelectorAll('wa-select[data-k^=sound]').forEach(s => setOptions(s, SOUNDS));
+  document.querySelectorAll('wa-select[data-k^=sound]').forEach(s => {
+    setOptions(s, SOUNDS);
+    s.onchange = () => { set(s.dataset.k, s.value); if (s.value !== 'None') post({ do: 'preview', sound: s.value }); };
+  });
+  document.querySelectorAll('wa-select[data-k^=gnani]').forEach(s => s.onchange = () => set(s.dataset.k, s.value));
+  document.querySelectorAll('wa-select[data-k^=ai]').forEach(s => s.onchange = () => set(s.dataset.k, s.value));
+  const paintVoices = () => {
+    const voice = document.querySelector('wa-select[data-k=gnaniTtsVoice]');
+    const voices = TTS_CATALOG[P.gnaniTtsModel] || [];
+    setOptions(voice, voices);
+    const values = options(voices).map(option => option.value);
+    if (!values.includes(P.gnaniTtsVoice)) P.gnaniTtsVoice = values[0] || '';
+    voice.value = P.gnaniTtsVoice;
+  };
+  document.querySelector('wa-select[data-k=gnaniTtsModel]').onchange = e => {
+    P.gnaniTtsModel = e.target.value; paintVoices();
+    post({ do: 'set', k: 'gnaniTtsModel', v: P.gnaniTtsModel });
+    paint();
+  };
+  document.querySelector('wa-select[data-k=gnaniTtsVoice]').onchange = e => set('gnaniTtsVoice', e.target.value);
+  document.querySelectorAll('input.field[data-k=gnaniVocabulary]').forEach(i => i.onchange = () => set(i.dataset.k, i.value));
+  document.querySelectorAll('input.field[data-k^=ai]').forEach(i => i.onchange = () => set(i.dataset.k, i.value.trim()));
+  $('gnaniKey').onchange = () => { post({ do: 'saveGnaniKey', value: $('gnaniKey').value }); $('gnaniKey').value = ''; };
+  document.querySelectorAll('.seg[data-k]').forEach(g => g.querySelectorAll('button').forEach(b => b.onclick = () => set(g.dataset.k, b.dataset.v)));
+  document.querySelectorAll('.sw input[data-k]').forEach(i => i.onchange = () => set(i.dataset.k, i.checked));
+  document.querySelectorAll('input[type=range]').forEach(r => {
+    r.oninput = () => { P[r.dataset.k] = +r.value; paint(); };
+    r.onchange = () => { set(r.dataset.k, +r.value); if (r.dataset.k === 'volume') post({ do: 'preview', sound: P.soundDone === 'None' ? 'Windows Ding' : P.soundDone }); };
+  });
+
+  const WHY = { haiku: 'Fastest, about 2 s an ask. Right for almost everything.', sonnet: 'Smarter for tricky asks. A few seconds slower; uses more of your plan.',
+                opus: 'Most capable. Slowest; uses your plan fastest.' };
+  function paint() {
+    if (!recording) showCaps(P.hotkeyLabel);
+    $('reset').style.display = (P.hotkeyLabel === 'Ctrl+Alt+Space' || P.hotkeyLabel === '⌃⌥Space') ? 'none' : '';
+    document.querySelectorAll('.seg[data-k]').forEach(g => g.querySelectorAll('button').forEach(b => {
+      const on = P[g.dataset.k] === b.dataset.v; b.classList.toggle('on', on); b.setAttribute('aria-pressed', on);
+    }));
+    if (!recording && $('schint').className !== 'warn') $('schint').textContent = shortcutHint();
+    $('talkhint').textContent = P.talkMode === 'toggle' ? 'Press once to listen, again to send. Pauses keep listening.' : 'Hold to listen. Release to send. Hover the box to type.';
+    document.querySelector('[data-k=talkMode]').closest('.group').hidden = P.input === 'type';
+    document.querySelectorAll('.sw input[data-k]').forEach(i => i.checked = !!P[i.dataset.k]);
+    document.querySelectorAll('wa-select[data-k]').forEach(s => s.value = P[s.dataset.k]);
+    document.querySelectorAll('input[type=range]').forEach(r => r.value = P[r.dataset.k]);
+    document.querySelectorAll('input.field[data-k=gnaniVocabulary]').forEach(i => { if (document.activeElement !== i) i.value = P[i.dataset.k] || ''; });
+    $('volv').textContent = Math.round(P.volume / .6 * 100) + '%';
+    $('ttsspeed').textContent = (+P.gnaniTtsSpeed).toFixed(2) + '×';
+    $('delayv').textContent = (+P.aheadDelay).toFixed(1) + ' s';
+    $('modelwhy').textContent = WHY[P.model] || '';
+    const claudeReady = PROVIDERS['claude-subscription']?.state === 'ready';
+    $('claudeModelHeading').hidden = $('claudeOptions').hidden = !claudeReady;
+    document.querySelector('[data-k=aheadDelay]').closest('.row').style.opacity = P.ahead ? 1 : .45;
+  }
+
+  const money = u => u < 1 ? (u * 100).toFixed(u < .1 ? 2 : 1) + '¢' : '$' + u.toFixed(2);
+  function state(s) {
+    const rows = s.providers?.providers || [];
+    PROVIDERS = Object.fromEntries(rows.map(provider => [provider.id, provider]));
+    const ready = id => PROVIDERS[id]?.state === 'ready';
+    const primary = s.providers?.options?.primary || [];
+    const backup = s.providers?.options?.backup || [{ value: 'none', label: 'No backup' }];
+    OPTION_SETS.aiPrimary = primary; OPTION_SETS.aiBackup = backup;
+    document.querySelectorAll('wa-select[data-option-key="aiPrimary"], wa-select[data-option-key="aiBackup"]').forEach(select => setOptions(select, OPTION_SETS[select.dataset.optionKey]));
+    const openaiModels = PROVIDERS.openai?.models || [];
+    setOptions($('chatgptModels'), openaiModels);
+    $('chatgptModelRow').hidden = !ready('openai') || !openaiModels.length;
+    $('chatgptStatus').textContent = PROVIDERS.openai?.message || 'ChatGPT is not connected.';
+    const claudeReady = ready('claude-subscription');
+    $('claudeModelHeading').hidden = $('claudeOptions').hidden = !claudeReady;
+    $('stats').innerHTML = [['Today', s.today], ['7 days', s.week], ['All time', s.all]].map(([n, u]) =>
+      `<div class="stat"><small>${n}</small><b>${u.asks}</b><span>asks · ${money(u.usd)}${u.asks ? ' · ' + u.secs + ' s avg' : ''}</span></div>`).join('') +
+      (s.all.asks ? `<div class="stat"><small>Avg response</small><b>${s.all.secs} s</b><span>per ask, all time</span></div>` +
+        `<div class="stat"><small>Avg cost</small><b>${money(s.all.usd / s.all.asks)}</b><span>per ask, all time</span></div>` : '');
+    const esc = t => t.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+    const typed = $('newrule')?.value || '';
+    $('rules').innerHTML = (s.rules.length ? s.rules.map((r, i) =>
+      `<div class="row rule"><div class="t">${esc(r)}</div><button class="x" data-i="${i}" aria-label="Forget this rule">×</button></div>`).join('')
+      : '<div class="empty">No rules yet.</div>') +
+      '<div class="add"><input id="newrule" placeholder="When I say focus mode, close Slack and open Notes" aria-label="New rule"><button class="btn blue" id="addrule">Add</button></div>';
+    document.querySelectorAll('.x').forEach(b => b.onclick = () => post({ do: 'forget', line: s.rules[+b.dataset.i] }));
+    const add = () => { const v = $('newrule').value.trim(); if (v) post({ do: 'remember', line: v }); };
+    $('newrule').value = typed; $('addrule').onclick = add; $('newrule').onkeydown = e => { if (e.key === 'Enter') add(); };
+    $('skills').innerHTML = (s.skills || []).length ? s.skills.map((k, i) =>
+      `<div class="row rule"><div class="t"><b>“${esc(k.say)}”</b><span>${esc(k.reply)}</span></div><button class="x" data-u="${i}" aria-label="Forget this command or procedure">×</button></div>`).join('')
+      : '<div class="empty">None yet. Ask Silly to do something; if it works, it lands here.</div>';
+    document.querySelectorAll('[data-u]').forEach(b => b.onclick = () => post({ do: 'unlearn', say: s.skills[+b.dataset.u].say }));
+    const m = s.me || { name: '', about: '', facts: [] };
+    if (document.activeElement !== $('myname')) $('myname').value = m.name;
+    if (document.activeElement !== $('myabout')) $('myabout').value = m.about;
+    $('abcount').textContent = $('myabout').value.length + '/200';
+    $('facts').innerHTML = m.facts.map((f, i) =>
+      `<div class="row rule"><div class="t"><span style="margin:0;color:var(--fg)">${esc(f)}</span></div><button class="x" data-f="${i}" aria-label="Forget this">×</button></div>`).join('');
+    document.querySelectorAll('[data-f]').forEach(b => b.onclick = () => post({ do: 'me', what: 'drop', text: m.facts[+b.dataset.f] }));
+    const usingClaudeCode = !s.providers || s.providers.primary === 'claude-code';
+    $('ptext').textContent = usingClaudeCode ? s.plan.text : 'Claude Code is not selected for unresolved requests.';
+    $('pdot').classList.toggle('bad', usingClaudeCode && !s.plan.ok);
+    $('pbtn').style.display = usingClaudeCode && !s.plan.ok ? '' : 'none';
+    if (s.providers) $('ptext').textContent = s.providers.primary === 'claude-code' ? (s.plan?.text || 'Claude status unavailable.') : 'Claude Code is not selected for unresolved requests.';
+    paint();
+  }
+
+  // About you: saved when the field loses focus or on Return
+  const saveMe = (id, what) => { const e = $(id); e.onchange = () => post({ do: 'me', what, text: e.value.trim() });
+    e.onkeydown = ev => { if (ev.key === 'Enter') { ev.preventDefault(); e.blur(); } }; };
+  saveMe('myname', 'name'); saveMe('myabout', 'about');
+  $('myabout').oninput = () => $('abcount').textContent = $('myabout').value.length + '/200';
+
+  // Apps: every installed app; suggested ones start ticked. The host asks Windows about the ticked ones in one go.
+  let APPS = [], pick = null, asking = 0, total = 0, view = 'key';
+  const appEsc = t => t.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  function appRow(a) {
+    const end = a.status === 'allowed' ? '<span class="pill ok">Allowed</span>'
+      : a.status === 'blocked' ? '<span class="pill no" data-do="automation" title="macOS won’t ask again. Turn it on in System Settings.">Blocked · Fix</span>'
+      : a.status === 'asking' ? '<span class="pill wait">Asking…</span>'
+      : `<input type="checkbox" class="ck" data-id="${a.id}" ${pick.has(a.id) ? 'checked' : ''} aria-label="Allow ${appEsc(a.name)}">`;
+    return `<label class="row app"><img src="${a.icon}" alt=""><div class="t"><b>${appEsc(a.name)}</b></div>${end}</label>`;
+  }
+  function paintApps() {
+    // Key Apps: the usual ones, with Select all. All Apps and search: every app, ticked one by one (no 100-box surprise).
+    const q = $('appq').value.trim().toLowerCase();
+    const shown = q ? APPS.filter(a => a.name.toLowerCase().includes(q)) : view === 'key' ? APPS.filter(a => a.suggested) : APPS;
+    const sel = !q && view === 'key' && shown.some(a => a.status === 'new') ? '<button class="all">Select all</button>' : '';
+    const title = q ? 'Matches' : view === 'key' ? 'Key apps' : `All apps · ${APPS.length}`;
+    $('applist').innerHTML = shown.length ? `<h3>${title}${sel}</h3><div class="group">${shown.map(appRow).join('')}</div>`
+      : '<div class="group"><div class="empty">No app matches.</div></div>';
+    document.querySelectorAll('#appview button').forEach(b => b.classList.toggle('on', b.dataset.v === view));
+    document.querySelectorAll('.ck').forEach(c => c.onchange = () => { c.checked ? pick.add(c.dataset.id) : pick.delete(c.dataset.id); count(); });
+    document.querySelectorAll('h3 .all').forEach(b => b.onclick = () => { shown.filter(a => a.status === 'new').forEach(a => pick.add(a.id)); paintApps(); });
+    document.querySelectorAll('#applist [data-do]').forEach(b => b.onclick = e => { e.preventDefault(); post({ do: b.dataset.do }); });
+    count();
+  }
+  function count() {
+    const n = APPS.filter(a => a.status === 'new' && pick.has(a.id)).length;
+    $('allow').disabled = !asking && !n;
+    $('allow').classList.toggle('stop', asking > 0);
+    $('allow').textContent = asking ? `Stop · ${total - asking + 1} of ${total}` : n ? `Allow ${n} App${n > 1 ? 's' : ''}` : 'Allow';
+  }
+  $('appq').oninput = paintApps;
+  document.querySelectorAll('[data-g]').forEach(b => b.onclick = () => post({ do: 'grant', id: b.dataset.g }));
+  document.querySelectorAll('#appview button').forEach(b => b.onclick = () => { view = b.dataset.v; paintApps(); });
+  $('allow').onclick = () => {
+    if (asking) {   // stops now; the macOS box on screen still takes an answer, and the list refreshes when it's done
+      post({ do: 'stopAllow' }); asking = 0;
+      APPS.forEach(a => { if (a.status === 'asking') a.status = 'new'; });
+      return paintApps();
+    }
+    const ids = APPS.filter(a => a.status === 'new' && pick.has(a.id)).map(a => a.id);
+    asking = total = ids.length; count(); post({ do: 'allow', ids });
+  };
+
+  const esc = t => String(t ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  let ownKind = 'api';
+  document.querySelectorAll('#ownkind button').forEach(b => b.onclick = () => {
+    ownKind = b.dataset.v;
+    document.querySelectorAll('#ownkind button').forEach(x => x.classList.toggle('on', x === b));
+    document.querySelectorAll('.own-api').forEach(r => r.hidden = ownKind !== 'api');
+    document.querySelectorAll('.own-mcp').forEach(r => r.hidden = ownKind !== 'mcp');
+    document.querySelector('[data-o="url"]').placeholder = ownKind === 'mcp' ? 'http://<server>:<port>/mcp' : 'http://<server>:9000';
+    $('ownres').textContent = ownKind === 'mcp' ? 'Silly connects to it only for requests that use its words.' : 'Reading from a web API runs freely; anything that changes it asks you first.';
+  });
+  const ownAuth = document.querySelector('[data-o="auth"]');
+  if (ownAuth) ownAuth.onchange = e => {
+    const n = document.querySelector('[data-o="auth_name"]');
+    n.hidden = !['header', 'query'].includes(e.target.value); n.placeholder = e.target.value === 'query' ? 'apikey' : 'X-Api-Key';
+  };
+  if ($('ownadd')) $('ownadd').onclick = () => {
+    const values = { kind: ownKind };
+    document.querySelectorAll('#addown [data-o]').forEach(i => values[i.dataset.o] = i.type === 'checkbox' ? String(i.checked) : i.value);
+    $('ownres').textContent = 'Testing…';
+    post({ do: 'intCustom', values });
+  };
+  window.st = {
+    gnaniKeyResult(text) { $('gnaniKey').placeholder = text; },
+    aiKeyResult([provider, text]) { const input = document.querySelector(`[data-ai-key="${provider}"]`); if (input) input.placeholder = text; },
+    chatgptResult(text) { $('chatgptStatus').textContent = text; },
+    chatgptModels(models) {
+      setOptions($('chatgptModels'), (models || []).map(m => ({ value: String(m.slug), label: String(m.display_name) })));
+      $('chatgptModelRow').hidden = !models.length;
+      $('chatgptStatus').textContent = models.length ? 'ChatGPT models loaded. A real request has not been tested yet.' : 'No ChatGPT plan models are available for this connection.';
+    },
+    claudeResult(text) { $('modelwhy').textContent = text; },
+    ownResult(text) {
+      $('ownres').textContent = text;
+      if (/saved/i.test(text)) document.querySelectorAll('#addown input.field').forEach(i => i.value = '');
+    },
+    integrations(list) {   // the catalog: set-up services first, each a card with what it lets you say, fill-ins, and where the key is
+      list.sort((x, y) => (y.on - x.on) || x.title.localeCompare(y.title));
+      $('ints').innerHTML = list.map(i => `<div class="group int" data-int="${esc(i.name)}" data-key-page="${esc(i.keyPage)}">
+        <div class="row"><div class="t"><b>${esc(i.title)}${i.mcp ? ' <span style="opacity:.6;font-weight:400">· MCP</span>' : ''}</b><span>${esc(i.about)}</span></div>
+          ${i.custom ? '<span class="pill" style="margin-right:6px">Yours</span>' : ''}${i.on ? '<span class="pill ok">On</span>' : ''}<button class="btn ${i.on ? '' : 'blue'} toggle">${i.on ? 'Edit' : 'Set up'}</button></div>
+        <div class="fill" hidden>
+          ${i.fields.map(f => `<div class="row"><div class="t" style="flex:none;width:200px"><b>${esc(f.label)}</b></div>
+            <input class="field" style="flex:1" data-k="${esc(f.k)}" type="${f.secret ? 'password' : 'text'}" value="${esc(f.value)}"
+              placeholder="${f.secret ? (f.has ? 'Saved. Type to replace' : 'Paste it here') : esc(f.example)}" autocomplete="off" spellcheck="false"></div>`).join('')}
+          <div class="row"><div class="t"><span>${esc(i.keyHelp)}</span></div><a class="btn keypage" target="_blank">Where’s my key?</a></div>
+          <div class="row"><div class="t"><span class="intres"></span></div>${i.on ? '<button class="btn red remove">Remove</button>' : ''}<button class="btn blue save">Save &amp; Test</button></div>
+        </div></div>`).join('');
+      $('ints').querySelectorAll('.int').forEach(g => {
+        const fill = g.querySelector('.fill'), url = () => (g.querySelector('input[data-k$="url"]')?.value || '').trim().replace(/\/$/, '');
+        g.querySelector('.toggle').onclick = () => { fill.hidden = !fill.hidden; };
+        const kp = g.querySelector('.keypage');
+        kp.onmouseenter = kp.onfocus = () => { kp.href = url() ? url() + g.dataset.keyPage : '#'; };
+        kp.onclick = e => { if (!url()) { e.preventDefault(); g.querySelector('.intres').textContent = 'Fill in the address first.'; } };
+        g.querySelector('.save').onclick = () => {
+          const values = {}; g.querySelectorAll('input').forEach(i => values[i.dataset.k] = i.value);
+          g.querySelector('.intres').textContent = 'Testing…';
+          post({ do: 'intSave', name: g.dataset.int, values });
+        };
+        const rm = g.querySelector('.remove');
+        if (rm) rm.onclick = () => { if (confirm('Remove ' + g.querySelector('b').textContent + '? Its saved key is deleted too.')) post({ do: 'intRemove', name: g.dataset.int }); };
+      });
+    },
+    intResult([name, text]) { const g = $('ints').querySelector(`[data-int="${name}"]`); if (g) { g.querySelector('.fill').hidden = false; g.querySelector('.intres').textContent = text; } },
+    perms(p) {   // each row shows Allowed or its Allow button
+      document.querySelectorAll('[data-g]').forEach(b => { b.hidden = !!p[b.dataset.g]; b.previousElementSibling.hidden = !p[b.dataset.g]; });
+    },
+    tab(name) { document.querySelector(`nav button[data-s="${name}"]`).click(); },
+    apps(list) {
+      if (asking) return;
+      if (!pick) pick = new Set(list.filter(a => a.suggested && a.status === 'new').map(a => a.id));
+      APPS = list; paintApps();
+    },
+    appStatus([id, status]) {
+      const a = APPS.find(a => a.id === id); if (!a) return;
+      a.status = status; if (status !== 'asking') { asking = Math.max(0, asking - 1); pick.delete(id); }
+      paintApps();
+    },
+    allowDone() { asking = 0; post({ do: 'apps' }); },
+    load(d) {
+      if (d.ttsCatalog) TTS_CATALOG = d.ttsCatalog;
+      if (d.options) {
+        OPTION_SETS = d.options;
+      }
+      if (d.sounds && d.sounds.length) { SOUNDS = d.sounds; P = d.prefs || P; fillSounds(); }
+      P = {talkMode: 'hold', ...d.prefs}; recording = false;
+      $('shortcut').classList.remove('rec'); $('change').textContent = 'Change Shortcut';
+      if (d.icon) $('icon').src = $('bigicon').src = d.icon;
+      $('ver').textContent = $('aboutver').textContent = d.version ? 'Version ' + d.version : 'Silly';
+      if (d.update) $('upstatus').textContent = d.update;
+      if (d.options) document.querySelectorAll('wa-select[data-option-key]').forEach(s => setOptions(s, OPTION_SETS[s.dataset.optionKey]));
+      paintVoices();
+      if (d.voiceDiagnostics) {
+        const v = d.voiceDiagnostics;
+        $('voiceDiag').textContent = `STT: ${v.sttActive} · TTS: ${v.ttsActive}`;
+        $('voiceDiagDetail').textContent = `Preferred STT ${v.sttPreferred}; preferred TTS ${v.ttsPreferred}; selected ${v.model} / ${v.voice} / ${v.language}; credentials: ${v.credentialSource}. ${v.ttsRequest || ''}. ${v.sttError || v.ttsError || ''}`.trim();
+      }
+      paint(); if (d.state) state(d.state);
+    },
+    voiceTest(text) { $('voiceTest').textContent = text; },
+    rec(m) { if (recording) /^Add/.test(m) ? showCaps('', m) : showCaps(m, m ? '' : 'Press your shortcut'); },   // held modifiers, live
+    taken() { $('schint').textContent = 'Another app already uses that shortcut. Kept your old one.'; $('schint').className = 'warn';
+              setTimeout(() => { $('schint').className = ''; $('schint').textContent = shortcutHint(); }, 4000); },
+    state,
+  };
+</script>
+</body></html>

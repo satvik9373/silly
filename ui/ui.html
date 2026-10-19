@@ -1,0 +1,673 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<!-- Silly overlay. Silly.exe loads this, puts orbs.js in place of the marker below, and calls window.ui.* -->
+<style>
+  @font-face { font-family: "Satoshi"; src: url("assets/fonts/Satoshi-Variable.ttf") format("truetype"); font-style: normal; font-weight: 300 500; font-display: swap; }
+  :root { color-scheme: dark; --ease: cubic-bezier(.2,.8,.2,1); --spring: cubic-bezier(.34,1.56,.64,1); }
+  html, body { margin: 0; background: transparent; overflow: hidden; -webkit-user-select: none; cursor: default;
+    font: 400 13px "Satoshi", system-ui, sans-serif; letter-spacing: -.01em; color: #f5f5f7; -webkit-font-smoothing: antialiased; }
+  button, input, textarea, select, kbd { font-family: "Satoshi", system-ui, sans-serif; font-weight: 400; }
+  html { background: transparent; }   /* native glass tint sits below the live window layer */
+  #card { padding: 12px 14px 14px; animation: pop .42s var(--spring) both; box-sizing: border-box;
+    display: flex; flex-direction: column; max-height: var(--screen-height, 10000px); }
+  #card.again { animation: none; }
+  #card.held { box-sizing: border-box; display: flex; flex-direction: column; }   /* dragged to a height: keep it */
+  #card.held #comp { margin-top: auto; } #card.held #thread { margin-bottom: 12px; }
+
+  #head { display: flex; align-items: center; gap: 10px; height: 44px; flex: none; padding-right: 30px; }
+  canvas { width: 44px; height: 44px; flex: none; margin-left: -4px; transition: transform .35s var(--ease); }
+  #status { flex: 1; min-width: 0; font-size: 12.5px; color: #a1a1a6; white-space: nowrap; overflow: hidden;
+    text-overflow: ellipsis; }
+  .elapsed { display: flex; align-items: baseline; gap: 6px; margin-top: 10px; color: #8e8e93; font-size: 10.5px; line-height: 16px; animation: in .25s var(--ease) both; }
+  .elapsed .redo { margin-left: auto; padding: 0; border: 0; background: none; font: 500 11px "Satoshi", system-ui, sans-serif; color: #8e8e93; cursor: pointer; transition: color .2s; }
+  .elapsed .redo:hover { color: #f5f5f7; }
+  .elapsed b { color: #a1a1a6; font-weight: 400; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  #status span { display: inline-block; max-width: 100%; vertical-align: top; overflow: hidden; text-overflow: ellipsis; animation: in .35s var(--ease) both; }
+  #status.live span { background: linear-gradient(90deg, #8e8e93 0%, #fff 45%, #8e8e93 90%); background-size: 200% 100%;
+    -webkit-background-clip: text; color: transparent; animation: in .35s var(--ease) both, shimmer 1.5s linear infinite; }
+
+  #thread { max-height: 360px; min-height: 0; overflow-y: auto; scroll-behavior: smooth; padding-top: 2px;
+    -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 14px, #000 100%); }
+  #thread::-webkit-scrollbar { width: 0; }
+  #thread:empty { display: none; }
+  .turn { padding-top: 10px; animation: in .4s var(--ease) both; transition: opacity .4s var(--ease); }
+  .turn + .turn { margin-top: 10px; border-top: .5px solid rgba(255,255,255,.08); }
+  .turn.old { opacity: .55; }
+
+  .q { margin-left: auto; width: fit-content; max-width: 86%; padding: 7px 11px; border-radius: 14px 14px 4px 14px;
+    background: rgba(255,255,255,.09); box-shadow: inset 0 0 0 .5px rgba(255,255,255,.12);
+    font-size: 13px; line-height: 1.38; color: #e5e5ea; overflow-wrap: anywhere; cursor: pointer;
+    transition: font-size .3s var(--ease), color .3s; }
+  .q.live { font-size: 15px; color: #fff; }
+  .q.live::after { content: ""; display: inline-block; width: 1.5px; height: 1em; margin-left: 2px; vertical-align: -2px;
+    background: #fff; animation: blink 1s steps(1) infinite; }
+  .q.empty:not(.hear) { display: none; }
+  .q.empty.hear { color: #8e8e93; } .q.empty.hear::before { content: "Listening…"; }   /* voice: the bubble waits for words */
+
+  .steps { margin-top: 8px; display: flex; flex-direction: column; gap: 4px; }
+  .steps:empty { display: none; }
+  .steps[data-more]::before { content: "+" attr(data-more) " earlier"; font-size: 11px; color: #636366; padding-left: 12px; }
+  .step { font-size: 12px; color: #8e8e93; display: flex; gap: 7px; align-items: center; white-space: nowrap;
+    overflow: hidden; animation: in .35s var(--ease) both; }
+  .step::before { content: ""; flex: none; width: 5px; height: 5px; border-radius: 50%; background: #636366;
+    transition: background .3s; }
+  .step span { overflow: hidden; text-overflow: ellipsis; }
+  .step.live { color: #f5f5f7; }
+  .step.live::before { background: #fff; animation: pulse 1s ease-in-out infinite; }
+  .step.done::before { background: #30d158; }
+  .turn.preview .mini.on { position: relative; z-index: 1; }   /* not sticky: its picture is under this see-through page, so nothing may scroll beneath it; the bounded steps keep it still */
+  .turn.preview .steps { height: 76px; min-height: 76px; margin-top: -14px; justify-content: flex-end; overflow: hidden;
+    -webkit-mask-image: linear-gradient(to bottom, transparent 14px, #000 34px); }
+  .turn.preview .steps[data-more]::before { content: none; }
+  .turn.preview .step { flex: none; animation: none; }
+
+  .mini { display: grid; grid-template-rows: 0fr; margin-top: 0; opacity: 0; transform: translateY(6px) scale(.96);
+    transform-origin: top left; transition: grid-template-rows .42s var(--ease), margin .42s var(--ease), opacity .24s, transform .42s var(--spring); }
+  .mini.on { grid-template-rows: 1fr; margin-top: 10px; opacity: 1; transform: none; }
+  .mini-inner { min-height: 0; overflow: hidden; padding: 0 4px; margin-left: -4px; }
+  .mini-view { position: relative; display: block; padding: 0; width: 100%; aspect-ratio: 16/10; border: 0;
+    border-radius: 12px; background: transparent; overflow: hidden; cursor: pointer; color: #f5f5f7;
+    box-shadow: inset 0 0 0 .5px rgba(255,255,255,.14), 0 8px 24px rgba(0,0,0,.28); transition: box-shadow .24s; }
+  .mini-view:hover { box-shadow: inset 0 0 0 1px rgba(255,255,255,.3), 0 10px 28px rgba(0,0,0,.36); }   /* no scale: the native picture under it can't follow */
+  .mini-fallback { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px;
+    background: radial-gradient(120% 90% at 50% 0%, rgba(255,255,255,.07), transparent 70%), rgba(18,18,20,.96); transition: opacity .3s; }
+  .mini-fallback::after { content: ""; position: absolute; inset: 0; background: linear-gradient(100deg, transparent 30%, rgba(255,255,255,.05) 50%, transparent 70%);
+    animation: sweep 1.8s linear infinite; will-change: transform; }   /* first frame on its way; transform, not background-position, so the GPU moves it without repaints */
+  @keyframes sweep { from { transform: translateX(-100%); } to { transform: translateX(100%); } }
+  .mini.live .mini-fallback { opacity: 0; pointer-events: none; }
+  .mini-fallback img { width: 34px; height: 34px; object-fit: contain; filter: drop-shadow(0 4px 10px rgba(0,0,0,.4)); }
+  .mini-title { max-width: 80%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 400 11.5px "Satoshi", system-ui, sans-serif; color: #8e8e93; }
+  .mini-tag, .mini-hint { position: absolute; top: 8px; display: flex; align-items: center; gap: 6px; height: 22px; padding: 0 9px; box-sizing: border-box;
+    border-radius: 11px; font: 500 11px "Satoshi", system-ui, sans-serif; color: #f5f5f7; background: rgba(20,20,22,.72);
+    box-shadow: inset 0 0 0 .5px rgba(255,255,255,.14), 0 2px 8px rgba(0,0,0,.3); -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); }
+  .mini-tag { left: 8px; max-width: calc(100% - 90px); }
+  .mini-tag span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .mini-tag i { width: 6px; height: 6px; flex: none; border-radius: 50%; background: #0a84ff; box-shadow: 0 0 6px #0a84ff; animation: pulse 1.2s ease-in-out infinite; }
+  .mini.done .mini-tag i { width: 8px; height: 4px; border-radius: 0; background: none; box-shadow: none; animation: none;
+    border-left: 1.5px solid #30d158; border-bottom: 1.5px solid #30d158; transform: rotate(-45deg) translate(1px,-1px); }
+  .mini-hint { right: 8px; opacity: 0; transform: translateY(-3px); transition: opacity .2s, transform .24s var(--ease); }
+  .mini-view:hover .mini-hint, .mini-view:focus-visible .mini-hint { opacity: 1; transform: none; }
+  .mini-point { position: absolute; width: 24px; height: 24px; margin: -12px; border: 1px solid rgba(10,132,255,.8);
+    border-radius: 50%; background: rgba(10,132,255,.18); box-shadow: 0 0 14px rgba(10,132,255,.3); pointer-events: none; animation: mini-ripple .8s var(--ease) both; }
+  .mini-point.scroll { width: 44px; height: 16px; margin: -8px -22px; border: 0; border-radius: 8px;
+    background: linear-gradient(transparent, rgba(10,132,255,.45), transparent); animation: mini-scroll .65s var(--ease) both; }
+  .mini-point.type { width: 2px; height: 18px; margin: -9px -1px; border: 0; border-radius: 1px; background: #0a84ff; animation: mini-caret .8s var(--ease) both; }
+  @keyframes mini-ripple { from { opacity: .9; transform: scale(.5); } to { opacity: 0; transform: scale(1.8); } }
+  @keyframes mini-scroll { from { opacity: 0; transform: translate(0,0); } 30% { opacity: 1; } to { opacity: 0; transform: translate(var(--dx),var(--dy)); } }
+  @keyframes mini-caret { 0%, 100% { opacity: 0; } 30%, 65% { opacity: .9; } }
+
+  .a { margin-top: 9px; font-size: 14px; line-height: 1.48; overflow-wrap: anywhere; cursor: copy; }
+  .a:empty { display: none; }
+  .a .w { display: inline-block; animation: word .5s var(--ease) both; }
+  .a.cancel { color: #8e8e93; font-size: 12.5px; }
+  .a.stopped { display: flex; align-items: center; gap: 8px; color: #a1a1a6; font-size: 12.5px; letter-spacing: .1px; }
+  .a.stopped i { width: 7px; height: 7px; border-radius: 2px; background: #ff453a; box-shadow: 0 0 8px rgba(255,69,58,.6);
+    animation: in .35s var(--spring) both; }
+  .step.cut { color: #636366; text-decoration: line-through; text-decoration-color: rgba(255,255,255,.2); }
+
+  #x { position: absolute; top: 12px; right: 12px; width: 22px; height: 22px; border-radius: 50%; display: grid;
+    place-items: center; opacity: .7; z-index: 2;
+    background: radial-gradient(120% 120% at 30% 15%, rgba(255,255,255,.30), rgba(255,255,255,.07) 55%, rgba(255,255,255,.03));
+    box-shadow: inset 0 0 0 .5px rgba(255,255,255,.35), inset 0 -1.5px 2px rgba(0,0,0,.28), 0 2px 6px rgba(0,0,0,.22);
+    transition: transform .45s var(--spring), opacity .25s, box-shadow .3s, background .3s; }
+  #x svg { width: 8px; height: 8px; stroke: #fff; stroke-width: 1.6; stroke-linecap: round; transition: transform .45s var(--spring); }
+  #x.hot { transform: scale(1.28); opacity: 1;
+    background: radial-gradient(120% 120% at 30% 15%, rgba(255,255,255,.5), rgba(255,255,255,.14) 55%, rgba(255,255,255,.06));
+    box-shadow: inset 0 0 0 .5px rgba(255,255,255,.55), inset 0 -1.5px 3px rgba(0,0,0,.3), 0 0 0 4px rgba(255,255,255,.05),
+      0 4px 14px rgba(0,0,0,.35); }
+  #x.hot svg { transform: rotate(90deg); }
+
+  /* safe mode: Silly asks before it deletes, sends or buys */
+  .ok { margin-top: 10px; padding: 11px 12px 12px; border-radius: 14px; background: rgba(255,255,255,.07); cursor: pointer;
+    box-shadow: inset 0 0 0 .5px rgba(255,255,255,.14); animation: grow .32s var(--spring) both; overflow: hidden; max-height: 320px;
+    transition: max-height .34s var(--ease), opacity .25s, margin .34s var(--ease), padding .34s var(--ease), background .2s; }
+  .ok:hover { background: rgba(255,255,255,.09); }
+  .ok.gone { max-height: 0; opacity: 0; margin-top: 0; padding-top: 0; padding-bottom: 0; }
+  .ok b { display: block; font-size: 13.5px; font-weight: 500; }
+  .ok code { display: block; margin-top: 4px; font: 11px/15px ui-monospace, Menlo, monospace; color: #8e8e93; max-height: 15px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; transition: max-height .34s var(--ease), color .2s; }
+  .ok:hover code { color: #aeaeb2; }
+  .ok code.wrap { white-space: pre-wrap; overflow-wrap: anywhere; }
+  .ok code.full { max-height: 165px; overflow-y: auto; color: #d1d1d6; }
+  .ok code::-webkit-scrollbar { width: 0; }
+  .ok div { display: flex; gap: 8px; margin-top: 11px; }
+  .ok button, .pk .bar button, .rewrite button { flex: 1; height: 28px; border: 0; border-radius: 14px; font: 500 12.5px "Satoshi", system-ui, sans-serif; letter-spacing: -.012em; color: #fff;
+    cursor: pointer; background: rgba(255,255,255,.1); box-shadow: inset 0 0 0 .5px rgba(255,255,255,.16); transition: transform .3s var(--spring), background .2s; }
+  .ok button.go, .pk .bar button.go, .rewrite button.go { background: #0a84ff; box-shadow: none; }
+  .ok button:hover, .pk .bar button:hover { transform: scale(1.03); } .ok button:active, .pk .bar button:active { transform: scale(.96); }
+
+  /* "which one?": the AI isn't sure, so it shows its choices. Click one to see it big; click outside it for all of them again */
+  .pk { margin-top: 10px; padding: 11px 12px 12px; border-radius: 14px; background: rgba(255,255,255,.07); box-shadow: inset 0 0 0 .5px rgba(255,255,255,.14);
+    animation: grow .32s var(--spring) both; overflow: hidden; max-height: 900px; cursor: default;
+    transition: max-height .34s var(--ease), opacity .25s, margin .34s var(--ease), padding .34s var(--ease); }
+  .pk.gone { max-height: 0; opacity: 0; margin-top: 0; padding-top: 0; padding-bottom: 0; }
+  .pk > b { display: block; margin-bottom: 10px; font-size: 13.5px; font-weight: 500; }
+  .pk .g { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 8px; }
+  .pk .g.list { grid-template-columns: 1fr; gap: 4px; }
+  .pk .c { display: flex; flex-direction: column; gap: 3px; min-width: 0; margin: 0; padding: 5px 5px 7px; border: 0; border-radius: 10px; text-align: left;
+    font: inherit; color: inherit; cursor: pointer; background: rgba(255,255,255,.04); box-shadow: inset 0 0 0 .5px rgba(255,255,255,.08);
+    animation: in .35s var(--ease) both; transition: transform .3s var(--spring), background .2s; }
+  .pk .g.list .c { padding: 8px 11px; }
+  .pk .c:hover { background: rgba(255,255,255,.1); transform: scale(1.03); } .pk .c:active { transform: scale(.97); }
+  .pk .th { display: grid; place-items: center; aspect-ratio: 4 / 3; margin-bottom: 3px; border-radius: 6px; overflow: hidden; background: rgba(0,0,0,.28);
+    font-size: 11px; font-weight: 500; letter-spacing: .4px; color: #8e8e93; transition: height .34s var(--ease); }
+  .pk .th img { width: 100%; height: 100%; object-fit: contain; }
+  .pk .p { display: none; font-size: 10.5px; color: #636366; overflow-wrap: anywhere; } .pk.open .c.on .p:not(:empty) { display: block; }
+  .pk .n, .pk .s { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .pk .n { font-size: 12px; color: #f5f5f7; } .pk .s { font-size: 10.5px; color: #8e8e93; } .pk .s:empty { display: none; }
+  .pk.open .c:not(.on), .pk.open .other { display: none; }
+  .pk .other { display: block; width: 100%; box-sizing: border-box; height: 30px; margin: 8px 0 0; padding: 0 11px; border: 0; border-radius: 10px; outline: none;
+    background: rgba(255,255,255,.05); box-shadow: inset 0 0 0 .5px rgba(255,255,255,.14); color: #f5f5f7; font: 400 12.5px "Satoshi", system-ui, sans-serif; transition: box-shadow .2s, background .2s; }
+  .pk .other::placeholder { color: #8e8e93; }
+  .pk .other:focus { background: rgba(255,255,255,.08); box-shadow: inset 0 0 0 1px #0a84ff; }
+  .pk.open .c.on { grid-column: 1 / -1; transform: none; background: rgba(255,255,255,.06); animation: grow .32s var(--spring) both; }
+  .pk.open .c.on .th { aspect-ratio: auto; height: 200px; }
+  .pk.open .c.on .n { font-size: 13px; } .pk.open .c.on .n, .pk.open .c.on .s { white-space: normal; overflow-wrap: anywhere; }
+  .pk .bar { display: flex; gap: 8px; margin-top: 10px; }
+  .pk:not(.open) .bar :is(.back, .go), .pk.open .bar .none { display: none; }
+
+  .a.draft { white-space: pre-wrap; }
+  .rewrite { display: flex; gap: 7px; margin-top: 11px; }
+  .rewrite button:disabled { opacity: .45; cursor: default; }
+  .rewrite-note { color: #8e8e93; font-size: 12px; margin-top: 8px; }
+  .rewrite button.del { background: #ff453a; }
+  .sel { font-size: 11.5px; color: #8e8e93; margin-bottom: 6px; padding-left: 8px; border-left: 2px solid rgba(10,132,255,.6); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+  /* safe mode off: a small tag says so; clicking it turns safe mode back on */
+  #mode { position: absolute; top: 12px; right: 42px; z-index: 2; display: none; align-items: center; gap: 5px; height: 22px; padding: 0 9px;
+    box-sizing: border-box; border-radius: 11px; font-size: 11px; font-weight: 500; line-height: 1; color: #ff9f0a; cursor: pointer;
+    background: rgba(255,159,10,.13); box-shadow: inset 0 0 0 .5px rgba(255,159,10,.32); transition: transform .3s var(--spring), background .2s; }
+  #mode::before { content: ""; width: 5px; height: 5px; border-radius: 50%; background: #ff9f0a; }
+  body:has(#mode.on) #head { padding-right: 130px; }
+  #mode.on { display: flex; animation: in .35s var(--ease) both; } #mode:hover { transform: scale(1.05); background: rgba(255,159,10,.2); }
+
+  /* tip: once in a while, one quiet line under the answer (Settings → Tips) */
+  .tip { display: flex; align-items: baseline; gap: 7px; width: fit-content; max-width: 100%; margin-top: 10px; padding: 6px 12px 6px 10px; box-sizing: border-box;
+    border-radius: 12px; font-size: 12px; line-height: 1.4; color: #e5e5ea; background: rgba(10,132,255,.16); box-shadow: inset 0 0 0 .5px rgba(10,132,255,.45);
+    animation: pop .5s var(--spring) .4s both; }
+  .tip::before { content: attr(data-k); flex: none; font-weight: 500; color: #64d2ff; }
+  .tip.learned { background: rgba(48,209,88,.14); box-shadow: inset 0 0 0 .5px rgba(48,209,88,.45); } .tip.learned::before { color: #30d158; }
+  .tip .off, .ok .off { flex: none; margin-left: auto; padding: 0; border: 0; background: none; font: 500 11px "Satoshi", system-ui, sans-serif; color: #8e8e93; cursor: pointer; transition: color .2s; }
+  .tip .off:hover, .ok .off:hover { color: #f5f5f7; }
+  .ok.offer { cursor: default; } .ok.offer:hover { background: rgba(255,255,255,.07); }   /* a question, not a command: nothing to unfold */
+  .ok.offer p { margin: 4px 0 0; font-size: 12px; line-height: 1.4; color: #8e8e93; }
+  .ok.offer .off { display: block; margin: 9px auto 0; height: auto; flex: none; border-radius: 0; background: none; box-shadow: none; }
+  .tip.gone { opacity: 0; transform: translateY(-4px); transition: opacity .4s, transform .4s; }
+
+  /* typing box: grows in on hover (or the shortcut, in typing mode); the mic goes back to voice */
+  #comp { display: flex; align-items: center; gap: 8px; margin-top: 0; height: 0; opacity: 0; overflow: hidden; flex: none; transition: height .24s var(--ease), margin-top .24s var(--ease), opacity .18s; }
+  #comp.open { height: 36px; margin-top: 12px; opacity: 1; }
+  #ask { flex: 1; min-width: 0; height: 34px; box-sizing: border-box; padding: 0 13px; border: 0; outline: 0; border-radius: 17px;
+    font: 400 13.5px "Satoshi", system-ui, sans-serif; color: #fff; caret-color: #0a84ff; -webkit-user-select: text; cursor: text;
+    background: rgba(255,255,255,.08); box-shadow: inset 0 0 0 .5px rgba(255,255,255,.14); transition: background .25s, box-shadow .25s; }
+  #ask::placeholder { color: #8e8e93; }
+  #ask:focus { background: rgba(255,255,255,.12); box-shadow: inset 0 0 0 .5px rgba(255,255,255,.22), 0 0 0 3px rgba(10,132,255,.35); }
+  #mic { flex: none; width: 34px; height: 34px; border-radius: 50%; border: 0; padding: 0; display: grid; place-items: center; cursor: pointer;
+    background: radial-gradient(120% 120% at 30% 15%, rgba(255,255,255,.26), rgba(255,255,255,.07) 60%);
+    box-shadow: inset 0 0 0 .5px rgba(255,255,255,.3), 0 2px 6px rgba(0,0,0,.22); transition: transform .35s var(--spring), background .25s; }
+  #mic:hover { transform: scale(1.1); background: radial-gradient(120% 120% at 30% 15%, rgba(255,255,255,.4), rgba(255,255,255,.12) 60%); }
+  #mic:active { transform: scale(.94); }
+  #mic svg { width: 15px; height: 15px; fill: none; stroke: #fff; stroke-width: 1.8; stroke-linecap: round; }
+
+  /* resize: drag the bottom-right corner */
+  #grip { position: absolute; right: 4px; bottom: 4px; width: 12px; height: 12px; opacity: 0; transition: opacity .25s; cursor: nwse-resize; }
+  .e { position: fixed; z-index: 3; }
+  #eL, #eR { top: 0; bottom: 0; width: 6px; cursor: ew-resize; } #eL { left: 0; } #eR { right: 0; }
+  #eT, #eB { left: 0; right: 0; height: 6px; cursor: ns-resize; } #eT { top: 0; } #eB { bottom: 0; }
+  #cTL, #cTR, #cBL, #cBR { width: 14px; height: 14px; z-index: 4; }
+  #cTL { top: 0; left: 0; cursor: nwse-resize; } #cBR { bottom: 0; right: 0; cursor: nwse-resize; }
+  #cTR { top: 0; right: 0; cursor: nesw-resize; } #cBL { bottom: 0; left: 0; cursor: nesw-resize; }
+  body:hover #grip { opacity: .45; }
+  #grip svg { width: 12px; height: 12px; stroke: #fff; stroke-width: 1.2; stroke-linecap: round; }
+
+  @keyframes grow { from { opacity: 0; transform: translateY(-6px) scale(.97); } }
+  @keyframes pop { from { opacity: 0; transform: scale(.94) translateY(-6px); } to { opacity: 1; transform: none; } }
+  @keyframes in { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: none; } }
+  @keyframes word { from { opacity: 0; filter: blur(5px); transform: translateY(3px); } to { opacity: 1; filter: none; transform: none; } }
+  @keyframes pulse { 50% { opacity: .3; } }
+  @keyframes blink { 50% { opacity: 0; } }
+  @keyframes shimmer { from { background-position: 100% 0; } to { background-position: -100% 0; } }
+  button:focus-visible { outline: 2px solid #64d2ff; outline-offset: 3px; }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+    #status.live span { background: none; color: #f5f5f7; }
+    .mini { transform: none !important; transition: opacity .2s !important; }
+    .mini-point { animation: none !important; transition: opacity .2s !important; }
+  }
+</style></head>
+<body>
+<div id="mode" title="Safe mode is off. Click to turn it on.">Full access</div>
+<div id="x"><svg viewBox="0 0 10 10"><path d="M1 1L9 9M9 1L1 9"/></svg></div>
+<div id="card">
+  <div id="head"><canvas id="orb"></canvas><div id="status"></div></div>
+  <div id="thread"></div>
+  <div id="comp" inert><input id="ask" placeholder="Ask Silly…" autocomplete="off" spellcheck="false" aria-label="Ask Silly">
+    <button id="mic" title="Talk instead" aria-label="Talk instead"><svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21"/></svg></button></div>
+</div>
+<div class="e" id="eL"></div><div class="e" id="eR"></div><div class="e" id="eT"></div><div class="e" id="eB"></div>
+<div class="e" id="cTL"></div><div class="e" id="cTR"></div><div class="e" id="cBL"></div><div class="e" id="cBR"></div>
+<div id="grip"><svg viewBox="0 0 12 12"><path d="M11 4L4 11M11 8L8 11"/></svg></div>
+<script type="text/plain" id="orbsrc">/*ORBS*/</script>
+<script type="module">
+  // thinking-orbs engine: M = MODE_FRAMES, p = paintFrame, r = resolvePreset (its minified export names)
+  const E = await import(URL.createObjectURL(new Blob([document.getElementById('orbsrc').textContent], { type: 'text/javascript' })));
+  const $ = id => document.getElementById(id);
+  const cv = $('orb'), ctx = cv.getContext('2d'), S = 64, dpr = 2;
+  cv.width = cv.height = S * dpr;
+  const reduced = matchMedia('(prefers-reduced-motion: reduce)');
+  reduced.addEventListener('change',()=>{if(reduced.matches)document.querySelectorAll('.step').forEach(e=>e.getAnimations().forEach(a=>a.cancel()));});
+  let visible = true;
+  let preset = E.r('breathing', S), state = 'breathing', boost = 1, t = 0, prev = performance.now();
+  const setState = s => { if (s !== state) { state = s; preset = E.r(s, S); } };
+  (function frame(now) {
+    if (visible) {
+      t += Math.min(0.05, (now - prev) / 1000) * preset.speed * boost * (reduced.matches ? 0 : 1);
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, S, S);
+      E.p(ctx, E.M[preset.mode](S, t, preset.opts), true, null);
+    }
+    prev = now;
+    setTimeout(() => requestAnimationFrame(frame), visible && !reduced.matches ? 0 : 250);
+  })(prev);
+
+  const turn = () => $('thread').lastElementChild;
+  const part = c => turn()?.querySelector('.' + c);
+  const post = m => webkit.messageHandlers.c.postMessage(m);
+  let atBottom = true;   // the user scrolled up to read: new steps must not yank them back down
+  // only the user's own wheel/trackpad decides (our scrolls and growing steps must not): up = stay put, back to the bottom = follow again
+  $('thread').addEventListener('wheel', e => { if (e.deltaY < 0) atBottom = false; else setTimeout(() => { const t = $('thread'); atBottom = t.scrollHeight - t.scrollTop - t.clientHeight < 90; }, 0); }, { passive: true });
+  const fit = (follow = true) => {
+    webkit.messageHandlers.h.postMessage($('card').offsetHeight);
+    if (follow && atBottom) $('thread').scrollTop = $('thread').scrollHeight;
+    miniRect();
+    post({ comp: $('comp').classList.contains('open') ? $('card').offsetHeight - $('comp').offsetTop + 4 : 0 });   // where clicks type, not drag
+  };
+  // Typing box. listening: the mic is on (clicking in drops it). Enter always sends; the app ignores it while an answer runs,
+  // and the text stays in the box until the app takes it (ui.listen), so nothing typed is lost.
+  let listening = false, hover = false, working = false;
+  let compFrame = 0;
+  const comp = (on, focus) => {
+    $('comp').inert = !on;
+    if ($('comp').classList.contains('open') !== on) {
+      $('comp').classList.toggle('open', on); fit();
+      cancelAnimationFrame(compFrame);
+      const end = performance.now() + 250;
+      const resize = () => { fit(false); if (performance.now() < end) compFrame = requestAnimationFrame(resize); };
+      compFrame = requestAnimationFrame(resize);
+    }
+    if (on && focus) $('ask').focus(); else if (!on) $('ask').blur();
+  };
+  // Clicking in or typing (not the cursor landing there from the shortcut): typing wins, so the mic stops and what was heard goes
+  const drop = () => {
+    if (listening) { listening = false; turn()?.remove(); setState('breathing'); status(''); boost = 1; $('orb').style.transform = ''; fit(); }
+    post({ type: 1 });
+  };
+  $('ask').onmousedown = drop; $('ask').oninput = () => { drop(); if (miniEnd) { post({miniClear:true});miniClear(); follow(440); } };   // typing the next ask: the finished view goes
+  $('ask').onfocus = () => post({ focus: true });
+  $('ask').onblur = () => { post({ focus: false }); if (!hover && !$('ask').value) comp(false); };
+  $('ask').onkeydown = e => {
+    if (!e.isComposing && !listening && !working && !e.target.value && e.key === 'ArrowUp') {
+      const q = part('q'); if (q && !q.classList.contains('empty')) { e.preventDefault(); e.target.value = q.textContent; }
+    }
+    if (e.key !== 'Enter' || e.isComposing) return;
+    const t = $('ask').value.trim();
+    if (t && !window.ui.respond(t)) post({ send: t });
+  };
+  $('mic').onclick = () => { $('ask').value = ''; comp(false); post({ mic: 1 }); };
+  const status = (s, live) => {
+    if (s && listening) s = 'Listening…';   // early AI notes never replace it while the user talks
+    $('status').className = live ? 'live' : '';
+    $('status').innerHTML = '<span></span>'; $('status').firstChild.textContent = s;
+  };
+  let followFrame=0;
+  const follow = ms => { cancelAnimationFrame(followFrame); const end = performance.now() + ms; (function f() { fit(); if (performance.now() < end) followFrame=requestAnimationFrame(f); })(); };   // interrupt a prior transition instead of stacking geometry loops
+  const settle = () => turn()?.querySelectorAll('.step.live').forEach(e => { e.classList.remove('live'); e.classList.add('done'); });
+  const reveal = (el, text) => {   // the answer fades in word by word, under a second in total
+    el.textContent = '';
+    const parts = text.split(/(\s+)/), gap = Math.min(16, 900 / parts.length);
+    parts.forEach((w, i) => {
+      if (/^\s+$/.test(w) || !w) return el.append(w);
+      const s = document.createElement('span'); s.className = 'w'; s.style.animationDelay = `${i * gap}ms`; s.textContent = w;
+      el.append(s);
+    });
+  };
+
+  let mini = null, miniTarget = null, miniEnd = 0, miniRemove = 0;
+  const miniRect = () => {
+    const v = mini?.querySelector('.mini-view');
+    if (!v) return post({miniRect: {rect: [0,0,0,0], clip: [0,0,0,0]}});
+    const r = v.getBoundingClientRect(), t = $('thread').getBoundingClientRect(), inner = mini.firstChild.getBoundingClientRect();
+    const x = Math.max(t.x,inner.x), y = Math.max(t.y,inner.y), right = Math.min(t.right,inner.right), bottom = Math.min(t.bottom,inner.bottom);
+    post({miniRect: {rect: [r.x,r.y,r.width,r.height], clip: [x,y,Math.max(0,right-x),Math.max(0,bottom-y)], opacity: +getComputedStyle(mini).opacity}});
+  };
+  const miniClear = () => {
+    clearTimeout(miniEnd); clearTimeout(miniRemove); miniEnd = miniRemove = 0; mini?.closest('.turn')?.classList.remove('preview'); mini?.remove(); mini = miniTarget = null; miniRect();
+  };
+  const miniFinish = (ok = true) => {
+    if (!mini || miniEnd) return;
+    if (!mini.classList.contains('on')) return miniClear();   // finished before it ever showed
+    mini.classList.toggle('done', ok);
+    if (ok) mini.querySelector('.mini-tag span').textContent = 'Done';
+    miniEnd = 1;   // the last frame stays until the next ask, typing, or a click on it
+    unpin();
+
+  };
+  // the picture is drawn under this see-through page: anything that scrolls under a pinned mini shows on top of it
+  const unpin = () => { mini?.closest('.turn')?.classList.remove('preview'); miniRect(); };
+  const miniUpdate = m => {
+    if (!turn() || !Number.isInteger(m.pid) || m.pid <= 0 || !/^\d+$/.test(m.windowID) || !Array.isArray(m.windowFrame) || m.windowFrame.length !== 4 || !m.windowFrame.every(Number.isFinite) || m.windowFrame[2] <= 0 || m.windowFrame[3] <= 0) return;
+    clearTimeout(miniEnd); clearTimeout(miniRemove); miniEnd = miniRemove = 0;
+    miniTarget = m;
+    if (!mini) {
+      mini = document.createElement('div'); mini.className = 'mini';
+      mini.innerHTML = '<div class="mini-inner"><button class="mini-view" type="button"><div class="mini-fallback"><img alt=""><span class="mini-title"></span></div><span class="mini-tag"><i></i><span></span></span><span class="mini-hint">Open ↗</span></button></div>';
+      part('steps').before(mini);
+      const v = mini.querySelector('.mini-view');
+      v.onclick = e => { e.stopPropagation(); post({miniOpen: true}); if (miniEnd) { miniClear(); follow(440); } };
+      v.onmouseenter = v.onmouseleave = () => follow(260);
+      void mini.offsetHeight; mini.born = performance.now();
+    }
+    mini.classList.remove('done');
+    clearTimeout(mini.wait);
+    const apply = () => {
+      if (!mini || miniEnd) return;
+      mini.classList.toggle('on', m.shown !== false); mini.inert = m.shown === false;
+      mini.closest('.turn')?.classList.toggle('preview', m.shown !== false); follow(440);
+    };
+    const wait = 500 - (performance.now() - mini.born);   // a task done in under half a second never flashes a mini screen; hiding is instant
+    if (m.shown === false || wait <= 0) apply(); else mini.wait = setTimeout(apply, wait);
+    mini.classList.toggle('live', !!m.live);
+    mini.querySelector('.mini-title').textContent = m.window || m.app || 'Window';
+    const image = mini.querySelector('img'); image.hidden = !m.icon; if (m.icon) image.src = m.icon;
+    mini.querySelector('.mini-view').setAttribute('aria-label', 'Open ' + (m.window || m.app || 'target window'));
+    mini.querySelector('.mini-tag span').textContent = m.app || 'Working';   // the step list right below already says what it's doing
+    follow(440);
+  };
+  const miniPoint = s => {
+    if (!miniTarget || !mini?.classList.contains('on')) return;
+    const p = s.trim().split(/\s+/).map(Number), f = miniTarget.windowFrame, v = mini.querySelector('.mini-view');
+    if (p.length !== 2 || !p.every(Number.isFinite) || p[0] < f[0] || p[1] < f[1] || p[0] > f[0]+f[2] || p[1] > f[1]+f[3]) return;
+    const scale = Math.min(v.clientWidth/f[2],v.clientHeight/f[3]);
+    v.querySelectorAll('.mini-point').forEach(e => e.remove());
+    const dot = document.createElement('i'), action = miniTarget.action;
+    dot.className = 'mini-point' + (action === 'scroll' ? ' scroll' : action === 'type' ? ' type' : '');
+    dot.style.left = ((v.clientWidth-f[2]*scale)/2 + (p[0]-f[0])*scale) + 'px';
+    dot.style.top = ((v.clientHeight-f[3]*scale)/2 + (p[1]-f[1])*scale) + 'px';
+    dot.style.setProperty('--dx', ({left:-14,right:14}[miniTarget.direction] || 0) + 'px');
+    dot.style.setProperty('--dy', ({up:-14,down:14}[miniTarget.direction] || 0) + 'px');
+    v.append(dot); if (reduced.matches) setTimeout(() => dot.style.opacity = 0, 650); setTimeout(() => dot.remove(), 850);
+  };
+  $('thread').addEventListener('scroll', miniRect);
+  new ResizeObserver(miniRect).observe($('thread'));
+
+  let clockStart = null, clockHeld = null, clockFrame = 0, clock = null;   // clockHeld: ms so far while a card waits for the user
+  const clockPaint = () => { clock.querySelector('b').textContent = ((performance.now() - clockStart) / 1000).toFixed(2) + ' s'; };
+  const clockTick = () => {
+    if (clockStart === null) return;
+    clockPaint();
+    clockFrame = requestAnimationFrame(clockTick);
+  };
+  const clockStop = () => { cancelAnimationFrame(clockFrame); if (clockStart !== null) clockPaint(); clockStart = clockHeld = null; };
+  const clockHold = () => { if (clockStart === null) return; cancelAnimationFrame(clockFrame); clockPaint(); clockHeld = performance.now() - clockStart; clockStart = null; };
+  const clockGo = () => { if (clockHeld === null) return; clockStart = performance.now() - clockHeld; clockHeld = null; clockTick(); };
+  const clockBegin = () => {
+    if (clockStart !== null || clockHeld !== null || !turn()) return;
+    clock = document.createElement('div'); clock.className = 'elapsed';
+    clock.title = 'Time Silly spent working. Waiting for your pick or approval is not counted.';
+    clock.innerHTML = '<b></b>';
+    turn().append(clock); clockStart = performance.now(); clockTick();
+  };
+
+  window.ui = {
+    selected(t) {   // the text Silly is working from, so the user knows it saw the right thing
+      const d = turn(); if (!d || !t.trim()) return;
+      const s = document.createElement('div'); s.className = 'sel'; s.textContent = 'Selected: “' + t.trim().replace(/\s+/g, ' ') + '”';
+      d.prepend(s); fit();
+    },
+    rewrite([draft, mode, editable]) {   // mode: replace · delete · draft (new text to paste elsewhere)
+      const d = turn(); if (!d) return;
+      part('a')?.classList.add('draft');
+      $('thread').querySelectorAll('.rewrite').forEach(e => e.remove());
+      const bar = document.createElement('div'); bar.className = 'rewrite'; bar.dataset.mode = mode;
+      const actions = { replace: [['Replace', 'replace'], ['Try again', 'retry'], ['Copy', 'copy']], delete: [['Delete', 'replace'], ['Try again', 'retry']], draft: editable ? [['Insert', 'replace'], ['Copy', 'copy'], ['Try again', 'retry']] : [['Copy', 'copy'], ['Try again', 'retry']] }[mode] || [];
+      for (const [label, action] of actions) {
+        const b = document.createElement('button'); b.textContent = label;
+        if (mode === 'draft' && action === 'copy' && !editable) b.className = 'go';
+        if (action === 'replace') { b.className = mode === 'delete' ? 'go del' : 'go'; b.disabled = !editable; b.title = !editable ? 'This app does not let Silly edit here. Use Copy.' : mode === 'draft' ? 'Insert at your cursor' : label + ' the selected text'; }
+        b.onclick = e => { e.stopPropagation(); post(action === 'copy' ? {copy: draft} : {[action]: true}); };
+        bar.append(b);
+      }
+      d.append(bar); fit();
+    },
+    replaced(ok) {
+      const bar = turn()?.querySelector('.rewrite'); if (!bar) return;
+      const note = document.createElement('div'); note.className = 'rewrite-note'; note.setAttribute('role', 'status');
+      const draft = bar.dataset.mode === 'draft';
+      note.textContent = ok ? ({delete: 'Deleted', draft: 'Inserted'}[bar.dataset.mode] || 'Replaced') : draft ? 'Your cursor moved. Click where it goes and ask again, or use Copy.' : 'Selection changed or this app cannot replace it. Select the text and ask again, or use Copy.';
+      turn().querySelector('.rewrite-note')?.remove(); turn().append(note);
+      bar.querySelector('.go').disabled = true; fit();
+    },
+    mini(m) { miniUpdate(m); },
+    finished() { clockStop(); miniFinish(false); },
+    visible(on) { visible = on; if (!on) { clockStop(); miniClear(); } },
+    limit(h) {
+      const value = h + 'px';
+      if ($('card').style.getPropertyValue('--screen-height') === value) return;
+      $('card').style.setProperty('--screen-height', value);
+      if ($('card').classList.contains('held')) $('card').style.minHeight = Math.min(h, parseFloat($('card').style.minHeight) || 0) + 'px';
+      fit(false);
+    },
+    reset() { miniClear(); clockStop(); $('thread').innerHTML = ''; $('thread').style.maxHeight = ''; $('card').classList.remove('held'); $('card').style.minHeight = ''; $('card').classList.remove('again'); void $('card').offsetWidth; },
+    listen(keep) {   // keep: a typed ask; the box stays for the next one
+      miniClear(); clockStop();
+      $('thread').querySelectorAll('.rewrite').forEach(e => e.remove());
+      hover = false;
+      listening = !keep;
+      working = false;
+      if (keep) $('ask').value = ''; else comp(false);
+      if ($('thread').children.length) $('card').classList.add('again');
+      [...$('thread').children].forEach(e => e.classList.add('old'));
+      while ($('thread').children.length > 5) $('thread').firstElementChild.remove();
+      const d = document.createElement('div'); d.className = 'turn';
+      d.innerHTML = '<div class="q live empty" title="Click to edit and ask again"></div><div class="steps"></div><div class="a" title="Click to copy this answer"></div>';
+      if (!keep) d.firstChild.classList.add('hear');
+      $('thread').append(d); atBottom = true;   // a new ask: back to following the newest
+      setState('listening'); boost = 1; status('Listening…', true); fit();
+    },
+    shortcut() {},   // just "Listening…": the user found "Release keys to send" too wordy
+    level(v) { boost = 0.5 + Math.min(1, v) * 2.5; $('orb').style.transform = `scale(${1 + Math.min(1, v) * .1})`; },
+    words(w) { const q = part('q'); if (q) { q.classList.toggle('empty', !w.trim()); q.textContent = w; fit(); } },
+    transcribe() {
+      clockBegin(); listening = false; working = true;
+      boost = 1; $('orb').style.transform = ''; setState('solving');
+      part('q')?.classList.remove('live', 'hear'); status('Transcribingâ€¦', true); fit();
+    },
+    act() {
+      clockBegin(); listening = false; working = true;
+      boost = 1; $('orb').style.transform = ''; setState('working');
+      part('q')?.classList.remove('live', 'hear'); status('Actingâ€¦', true); fit();
+    },
+    success() { status('Done'); },
+    think() {
+      clockBegin();
+      listening = false;
+      working = true;
+      boost = 1; $('orb').style.transform = ''; setState('solving');
+      part('q')?.classList.remove('live', 'hear'); status('Thinking…', true); fit();
+    },
+    line(l) {
+      const tag = l[0], s = l.slice(2);
+      if (tag === '▣') { try { miniUpdate(JSON.parse(s)); } catch {} }
+      else if (tag === '@') miniPoint(s);
+      else if (tag === '·') status(s, true);
+      else if (tag === '▸') {
+        settle();
+        const st = part('steps'), positions = mini?.classList.contains('on') && !reduced.matches ? new Map([...st.children].map(e => [e, {top:e.getBoundingClientRect().top,opacity:+getComputedStyle(e).opacity}])) : null;
+        if (positions) for(const e of positions.keys())e.getAnimations().forEach(a=>a.cancel());
+        const d = document.createElement('div'); d.className = 'step live'; d.innerHTML = '<span></span>'; d.firstChild.textContent = s;
+        st.append(d);
+        while (st.children.length > 4) { st.firstChild.remove(); st.dataset.more = (+st.dataset.more || 0) + 1; }   // long tasks: a quiet count, not a wall of steps
+        if (positions) for (const e of st.children) e.animate([{transform:`translateY(${positions.has(e) ? positions.get(e).top - e.getBoundingClientRect().top : 19}px)`,opacity:positions.get(e)?.opacity??0},{transform:'none',opacity:1}],{duration:350,easing:'cubic-bezier(.2,.8,.2,1)'});
+        status(s, true);
+        setState(/^(Searching|Reading|Looking|Taking|Checking|Finding|Waiting)/.test(s) ? 'searching' : /^(Moving|Opening|Using|Clicking|Scrolling|Pressing|Dragging|Typing)/.test(s) ? 'working' : 'connecting');
+      } else if (tag === '✓') {
+        miniFinish(); clockStop();
+        working = false;
+        settle(); part('q')?.classList.remove('live'); status('Done');
+        const a = part('a'); if (a) { a.dataset.answer = s; reveal(a, s); } setState('breathing');
+        document.querySelectorAll('.redo').forEach(e => e.remove());   // only the latest answer offers it
+        const q = part('q')?.textContent.trim();
+        if (q && clock?.closest('.turn') === turn()) {   // "That's wrong" also drops a learned shortcut that did the wrong thing
+          const b = document.createElement('button'); b.className = 'redo'; b.textContent = 'Try again';
+          b.onclick = e => { e.stopPropagation(); b.remove(); post({ send: `That's wrong, try again: ${q}\n(If it isn't clear what to change, ask me what was wrong.)` }); };
+          clock.append(b);
+        }
+      } else if (tag === 'i' && turn()) {
+        const learned = s.startsWith('Learned: '), d = document.createElement('div');   // "Learned" when it saved a rule, else "Tip"
+        d.className = 'tip' + (learned ? ' learned' : ''); d.dataset.k = learned ? 'Learned' : 'Tip'; d.textContent = learned ? s.slice(9) : s;
+        if (!learned) { const o = document.createElement('button'); o.className = 'off'; o.textContent = 'Turn off tips'; d.append(o); }
+        turn().append(d);
+        setTimeout(() => { d.classList.add('gone'); setTimeout(() => { d.remove(); fit(); }, 400); }, 9000);   // never sticks around
+      }
+      fit();
+    },
+    msg(s) {
+      miniFinish(false); clockStop();
+      listening = false; working = false; settle(); part('q')?.classList.remove('live'); setState('breathing'); status('Could not complete');
+      if (part('q')?.classList.contains('empty')) { turn().remove(); status(s); }
+      else { const a = part('a'); if (a) { a.className = 'a cancel'; a.textContent = s; } }
+      fit();
+    },
+    stopped(s) {   // Esc or the hotkey cut it off
+      miniClear(); clockStop();
+      listening = false;
+      working = false;
+      $('thread').querySelectorAll('.ok, .pk, .rewrite').forEach(e => e.remove());
+      turn()?.querySelectorAll('.step.live').forEach(e => { e.classList.remove('live'); e.classList.add('cut'); });
+      setState('breathing'); status('Cancelled'); boost = 1; $('orb').style.transform = '';
+      const q = part('q');
+      if (!q || q.classList.contains('empty')) { turn()?.remove(); status(s); return fit(); }
+      q.classList.remove('live');
+      const a = part('a'); a.className = 'a stopped'; a.innerHTML = '<i></i><span></span>'; a.lastChild.textContent = s;
+      fit();
+    },
+    hover(on) {   // the mouse came over the box: the typing box grows in; left with nothing typed: it goes
+      hover = on;
+      if (on) comp(true);   // even while listening: the mic keeps going until the user clicks in
+      else if (!on && !$('ask').value && document.activeElement !== $('ask')) comp(false);
+    },
+    compose(on) { comp(on, on); },
+    draft(t) { $('ask').value = t; comp(true, true); },
+    tap([x, y]) {   // a click on the box, not a drag: on the answer = copy it, anywhere else = type
+      const el = document.elementFromPoint(x, y), b = el?.closest('.ok button, .ok, .pk button, .pk, .rewrite button, .mini-view');
+      const field = el?.closest('.ok input, .ok textarea, .pk input, .pk textarea');   // "Something else…": a text field in a card takes the cursor
+      if (field) return field.focus();
+      if (b) return b.click();
+      if (el?.closest('#mode')) return post({ safe: true });
+      if (el?.closest('.tip .off')) { post({ off: 'tips' }); el.closest('.tip').remove(); return fit(); }   // its own "Turn off": no more tips
+      if (el?.closest('.tip')) { el.closest('.tip').remove(); return fit(); }   // click a tip: it goes
+      const on = el?.closest('.a:not(.stopped):not(.cancel)'), q = el?.closest('.q:not(.empty)');
+      drop();
+      if (on?.dataset.answer) post({ copy: on.dataset.answer });
+      else { if (q) $('ask').value = q.textContent; comp(true, true); }
+    },   // typing mode's shortcut: open and put the cursor in it
+    size(h) { $('thread').style.maxHeight = h + 'px'; fit(); },
+    hold(h) {   // the user dragged an edge: the box is h tall until the next conversation
+      const c = $('card'), o = $('comp').classList.contains('open') ? $('comp').offsetHeight : 0;
+      h = Math.min(h, parseFloat(c.style.getPropertyValue('--screen-height')) || h);
+      c.classList.add('held'); c.style.minHeight = h + 'px';
+      const t = Math.max(60, h - 26 - $('head').offsetHeight - o - 12);   // 26: card padding; 12: gap under the thread
+      $('thread').style.maxHeight = t + 'px'; post({ boxH: t }); fit(false);
+    },
+    respond(text) {
+      const o = $('thread').querySelector('.pk:not(.gone) .other');   // a choices card: the main box works like its "Something else" field
+      if (o) { $('ask').value = ''; o.value = text; o.onkeydown({ key: 'Enter', preventDefault() {} }); return true; }
+      const d = $('thread').querySelector('.ok.retry:not(.gone)');
+      if (!d) return false;
+      const t = text.toLowerCase().replace(/[.!?,]+/g, ' ').replace(/^\s*(?:um+|uh+|okay|ok|yeah|so)\s+/, '').replace(/\s+please\s*$/, '').replace(/\s+/g, ' ').trim();   // "Retry, please." = retry
+      const value = (['retry', 'try again'].includes(t) || t==='yes'&&!d.querySelector('[data-answer="y"]')) ? 'r' : ['try sonnet', 'sonnet', 'yes'].includes(t) ? 'y' : ['not now', 'no', 'cancel'].includes(t) ? 'n' : '';
+      const button=d.querySelector(`[data-answer="${value}"]`);
+      if(button){$('ask').value='';button.click();}
+      else { $('ask').value = text; status('Say “Retry”, “Try Sonnet” or “Not now”', true); }   // heard, but not an answer: say so, keep the card
+      return true;
+    },
+    ask([q, cmd, off, retry]) {   // off: a setting this card can turn off
+      $('thread').querySelectorAll('.ok').forEach(e => e.remove()); unpin();
+      const d = document.createElement('div'); d.className = 'ok';
+      if (off || retry) {
+        d.className = 'ok offer' + (retry ? ' retry' : '');
+        d.innerHTML = '<b></b><p></p><div><button data-answer="n">Not now</button>' +
+          (retry ? '<button data-answer="r"' + (off ? '' : ' class="go"') + '>Retry</button>' : '') +
+          (off ? '<button data-answer="y" class="go">' + (retry ? 'Try Sonnet' : 'Yes') + '</button>' : '') + '</div>' +
+          (off ? '<button class="off">Don’t ask again</button>' : '');
+        d.querySelector('p').textContent = cmd;
+      } else {
+        d.innerHTML = '<b></b><code></code><div><button>Don’t Allow</button><button class="go">Allow</button></div>';
+        d.querySelector('code').textContent = cmd;
+        const c = d.querySelector('code');
+        d.onclick = () => {   // the whole command: grows open, click again to fold it back
+          if (c.classList.toggle('full')) c.classList.add('wrap'); else setTimeout(() => c.classList.contains('full') || c.classList.remove('wrap'), 340);
+          follow(360);
+        };
+      }
+      d.querySelector('b').textContent = q;
+      d.onanimationend = () => d.style.animation = 'none';   // so the shrink below can transition
+      const offBtn = d.querySelector('.off');
+      if (offBtn) offBtn.onclick = e => { e.stopPropagation(); post({ off }); d.querySelectorAll(':scope > div > button')[0].click(); };   // off, and no to this one
+      d.querySelectorAll(':scope > div > button').forEach((b, i) => b.onclick = e => {
+        e.stopPropagation(); if (d.classList.contains('gone')) return;
+        post(retry ? { pick: b.dataset.answer } : { allow: !!i }); clockGo(); status(retry ? (i ? 'Trying again' : 'Not now') : i ? 'Allowed' : 'Not allowed', true); setState('solving');
+        d.classList.add('gone'); follow(360); setTimeout(() => { d.remove(); fit(); }, 360);
+      });
+      (turn() || $('thread')).append(d); setState('breathing'); status('Waiting for you'); clockHold(); fit();
+      setTimeout(() => {
+        if (!d.isConnected || d.classList.contains('gone')) return;
+        post(retry ? { pick: 'n' } : { allow: false }); clockGo(); d.remove(); status(retry ? 'Offer expired' : 'Approval expired', true); setState('solving'); fit();
+      }, 60000);
+    },
+    pick({ q, options }) {   // "which one?": the index picked (or "" = none of these) goes back to the app, then the card goes
+      $('thread').querySelectorAll('.pk').forEach(e => e.remove());
+      const d = document.createElement('div'); d.className = 'pk';
+      d.innerHTML = '<b></b><div class="g"></div><input class="other" placeholder="Something else…" aria-label="Something else: type or dictate, then press Return"><div class="bar"><button class="none">None of these</button><button class="back">All choices</button><button class="go">Use this</button></div>';
+      d.querySelector('b').textContent = q;
+      const g = d.querySelector('.g'), pics = options.some(o => o.img);
+      g.classList.toggle('list', !pics);   // nothing to preview (songs, people): one click picks
+      let on = null;
+      const view = c => { on?.classList.remove('on'); on = c; c?.classList.add('on'); d.classList.toggle('open', !!c); follow(360); };
+      const done = (i, s, own) => {   // own: what the user typed instead of a choice ("=" marks it, so "2" stays text)
+        if (d.classList.contains('gone')) return;
+        post({ pick: own ? '=' + own : i < 0 ? '' : String(i) }); clockGo();
+        if ((own || i >= 0) && part('steps')) {
+          const st = document.createElement('div'); st.className = 'step done'; st.innerHTML = '<span></span>';
+          st.firstChild.textContent = own ? 'You said: ' + own : 'Picked ' + options[i].label; part('steps').append(st);
+        }
+        status(s || (i < 0 ? 'None of these' : 'Picked'), true); setState('solving');
+        d.classList.add('gone'); follow(360); setTimeout(() => { d.remove(); fit(); }, 360);
+      };
+      options.forEach((o, i) => {
+        const c = document.createElement('button'); c.className = 'c'; c.style.animationDelay = i * 35 + 'ms';
+        c.innerHTML = (pics ? '<div class="th"></div>' : '') + '<div class="n"></div><div class="s"></div><div class="p"></div>';
+        if (pics && o.img) { const im = new Image(); im.alt = ''; im.draggable = false; im.onload = () => fit(); im.src = o.img; c.firstChild.append(im); }
+        else if (pics) c.firstChild.textContent = o.kind || '';   // no preview: its file type
+        c.querySelector('.n').textContent = o.label; c.querySelector('.s').textContent = o.sub; c.querySelector('.p').textContent = o.path || '';
+        c.onclick = e => { e.stopPropagation(); if (!pics) done(i); else view(on === c ? null : c); };
+        g.append(c);
+      });
+      d.onclick = () => view(null);   // a click outside the big one: all the choices again
+      d.onanimationend = e => { if (e.target === d) d.style.animation = 'none'; };   // so the shrink can transition
+      const other = d.querySelector('.other');
+      other.onclick = e => e.stopPropagation();
+      other.onkeydown = e => { if (e.key === 'Enter' && other.value.trim()) { e.preventDefault(); done(-1, 'Got it', other.value.trim().slice(0, 300)); } };
+      const [none, back, go] = d.querySelectorAll('.bar button');
+      none.onclick = e => { e.stopPropagation(); done(-1); };
+      back.onclick = e => { e.stopPropagation(); view(null); };
+      go.onclick = e => { e.stopPropagation(); done([...g.children].indexOf(on)); };
+      (turn() || $('thread')).append(d); setState('breathing'); status('Waiting for you'); clockHold(); fit();
+      setTimeout(() => d.isConnected && done(-1, 'Pick expired'), 105000);   // the brain stops waiting at 110 s
+    },
+    mode(safe) { $('mode').classList.toggle('on', !safe); },
+    xhot(on) { $('x').classList.toggle('hot', on); },
+    copied() { status('Copied to clipboard'); setTimeout(() => $('status').textContent === 'Copied to clipboard' && status(''), 1400); },
+  };
+  fit(); post({ ready: 1 });
+</script>
+</body></html>

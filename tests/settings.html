@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="en"><meta charset="utf-8"><title>Atticus Settings checks</title>
+<style>
+  body { background: #ececf0; color: #1d1d1f; font: 14px system-ui; margin: 24px; }
+  iframe { width: 780px; height: 532px; border: 0; border-radius: 12px; background: #f4f4f7; box-shadow: 0 16px 48px #0002; }
+  pre { white-space: pre-wrap; line-height: 1.6; } .pass { color: #168445; } .fail { color: #c22; }
+  @media (prefers-color-scheme: dark) { body { background: #1c1c1e; color: #f5f5f7; } iframe { background: #29292c; } }
+</style>
+<h1>Atticus Settings checks</h1><p>Mock bridge: no settings files, microphone or app actions.</p>
+<pre id="results">Running…</pre><iframe id="preview" title="Atticus Settings preview"></iframe>
+<script type="module">
+const frame = document.getElementById('preview'), results = document.getElementById('results'), messages = [], checks = [];
+const assert = (condition, name) => { if (!condition) throw Error(name); checks.push('✓ ' + name); };
+window.addEventListener('message', e => { if (e.source === frame.contentWindow) messages.push(e.data); });
+try {
+  const html = await (await fetch('../ui/settings.html')).text();
+  const loaded = new Promise(resolve => frame.onload = resolve);
+  frame.srcdoc = html.replace('<head>', `<head><script>window.webkit = {messageHandlers: {st: {postMessage: m => parent.postMessage(m, '*')}}};<\/script>`);
+  await loaded;
+  const w = frame.contentWindow, d = w.document;
+  w.st.tab('feedback');
+  await new Promise(r=>setTimeout(r,20));
+  const revision=()=>messages.filter(m=>m.do==='feedbackPreview').at(-1).revision;
+  assert(!d.getElementById('feedbackinclude').checked && d.getElementById('feedbackopen').disabled,'Feedback starts private and waits for preview');
+  w.st.feedback({revision:revision(),include:false,body:'What happened\nVersion: fixture'});
+  assert(!d.getElementById('feedbackopen').disabled && d.getElementById('feedbackbody').textContent.includes('Version: fixture'),'Exact feedback text is shown before GitHub');
+  d.getElementById('feedbackinclude').click();w.st.load({prefs:{hotkeyLabel:'⌃⌥Space',model:'haiku',volume:.16,aheadDelay:.7}});assert(d.getElementById('feedbackinclude').checked,'Preference refresh cannot silently change ask inclusion');await new Promise(r=>setTimeout(r,20));
+  assert(messages.some(m=>m.do==='feedbackPreview'&&m.include===true)&&d.getElementById('feedbackopen').disabled,'Ask opt-in waits for a new preview');
+  w.st.feedback({revision:revision(),include:false,body:'STALE'});assert(d.getElementById('feedbackopen').disabled,'Stale privacy preview cannot enable opening');
+  w.st.feedback({revision:revision(),include:true,body:'My last ask\nPrivate fixture words'});d.getElementById('feedbackopen').click();await new Promise(r=>setTimeout(r,20));
+  assert(messages.some(m=>m.do==='feedbackOpen'),'Reviewed feedback opens GitHub through native bridge');
+  const stale=revision();d.getElementById('feedbacktext').value='Edited feedback';d.getElementById('feedbacktext').dispatchEvent(new w.Event('input'));
+  assert(d.getElementById('feedbackopen').disabled,'Editing invalidates the draft before debounce');
+  w.st.feedback({revision:stale,include:true,body:'Old typed feedback'});assert(d.getElementById('feedbackopen').disabled,'Old text response cannot enable opening during debounce');
+  await new Promise(r=>setTimeout(r,330));assert(messages.some(m=>m.do==='feedbackInvalidate')&&messages.at(-1).text==='Edited feedback','Native draft is invalidated and current text is requested');
+  w.st.feedback({revision:revision(),include:true,body:'Edited feedback'});assert(!d.getElementById('feedbackopen').disabled,'Only the current text preview enables opening');
+  w.st.tab('feedback');assert(!d.getElementById('feedbackinclude').checked,'Every feedback visit resets ask inclusion');
+  assert(d.getElementById('screen').textContent.includes('Work stays in the background')&&d.getElementById('screen').textContent.includes('exact window'),'Settings explain background work and mini click');
+  assert(d.getElementById('meetings').textContent.includes('two seconds after the app releases the mic'),'Settings disclose supported call auto-end');
+
+  const prefs = {hotkeyLabel: '⌃⌥Space', input: 'voice', talkMode: 'hold', volume: .16, aheadDelay: .7, ahead: true, model: 'haiku', meeting: false, meetingAuto: 'sure', corner: 'top-left', linger: 'normal', login: true, menuIcon: true, instant: true, live: true, learn: true, safe: true, tips: true, askMe: true, soundStart: 'Pop', soundDone: 'Glass', soundStop: 'Tink'};
+  const optionSets = {
+    speechLanguages: [{value:'en-IN',label:'English (India)'},{value:'hi-IN',label:'Hindi'}],
+    ttsModels: [{value:'timbre-v3.0',label:'Timbre v3.0'},{value:'timbre-v2.5',label:'Timbre v2.5'}],
+    ttsLanguages: [{value:'en-IN',label:'English (India)'},{value:'auto',label:'Auto'}],
+    vocabularyStrengths: [{value:'0.5',label:'0.5'},{value:'1.0',label:'1.0'}],
+    aiPrimary: [{value:'claude-code',label:'Claude subscription'},{value:'openai',label:'ChatGPT plan'}],
+    aiBackup: [{value:'none',label:'No backup'},{value:'openai',label:'ChatGPT plan'}]
+  };
+  const ttsCatalog = {
+    'timbre-v3.0': [{value:'Shivani',label:'Shivani'},{value:'Lakshmi',label:'Lakshmi'}],
+    'timbre-v2.5': [{value:'Kaveri',label:'Kaveri'},{value:'Poorvi',label:'Poorvi'}]
+  };
+  const load = p => w.st.load({prefs: {...prefs, ...p}, options: optionSets, ttsCatalog});
+  load({});
+  assert(d.querySelectorAll('[data-option-key="ttsModels"] wa-option').length === 2, 'Each model is a separate selectable option');
+  assert(d.querySelectorAll('[data-option-key="speechLanguages"] wa-option').length === 2, 'Each speech language is a separate selectable option');
+  assert(d.querySelectorAll('[data-option-key="ttsLanguages"] wa-option').length === 2, 'Each TTS language is a separate selectable option');
+  assert(d.querySelectorAll('[data-option-key="vocabularyStrengths"] wa-option').length === 2, 'Each vocabulary strength is a separate selectable option');
+  assert(d.querySelectorAll('[data-option-key="aiPrimary"] wa-option').length === 2 && d.querySelectorAll('[data-option-key="aiBackup"] wa-option').length === 2, 'Each Intelligence provider choice is a separate selectable option');
+  assert(d.querySelector('[data-option-key="ttsModels"] wa-option').getAttribute('value') === 'timbre-v3.0' && d.querySelector('[data-option-key="ttsModels"] wa-option').textContent === 'Timbre v3.0', 'Options keep distinct values and labels');
+  assert(d.querySelectorAll('[data-k="gnaniTtsVoice"] wa-option').length === 2, 'Each voice is a separate selectable option');
+  load({gnaniTtsModel: 'timbre-v2.5', gnaniTtsVoice: 'Kaveri'});
+  assert(d.querySelectorAll('[data-k="gnaniTtsVoice"] wa-option').length === 2 && d.querySelector('[data-k="gnaniTtsVoice"]').value === 'Kaveri', 'Voice options update with the selected model and preserve selection');
+  w.st.chatgptModels([{slug:'safe',display_name:'A < B'}]);
+  assert(d.querySelector('#chatgptModels wa-option').textContent === 'A < B' && d.querySelectorAll('#chatgptModels wa-option').length === 1, 'Dynamic model labels are text-safe and separate');
+  assert([...d.querySelectorAll('.sw input,select[data-k],input[type=range],.seg[data-k]')].every(e=>e.hasAttribute('aria-label')||e.hasAttribute('aria-labelledby')),'Every Settings control has an accessible name');
+  w.st.tab('meetings');
+  const meetingSwitch = d.querySelector('[data-k="meeting"]');
+  assert(!meetingSwitch.checked && d.getElementById('meetingDemo').disabled, 'Meeting is off by default');
+  meetingSwitch.click(); await new Promise(resolve => setTimeout(resolve, 20));
+  assert(messages.some(m => m.do === 'set' && m.k === 'meeting' && m.v === true), 'Meeting switch uses native settings');
+  const automatic = d.querySelector('[data-k="meetingAuto"]');
+  assert(automatic.querySelector('[data-v="sure"]').getAttribute('aria-pressed') === 'true', 'When sure is the default');
+  automatic.querySelector('[data-v="ask"]').click(); await new Promise(resolve => setTimeout(resolve, 20));
+  assert(messages.some(m => m.do === 'set' && m.k === 'meetingAuto' && m.v === 'ask'), 'Manual mode persists');
+  d.getElementById('meetingDemo').click(); await new Promise(resolve => setTimeout(resolve, 20));
+  assert(messages.some(m => m.do === 'meetingDemo'), 'Demo row opens meeting');
+  w.st.tab('general');
+  const mode = d.querySelector('[data-k="talkMode"]'), hold = mode.querySelector('[data-v="hold"]'), toggle = mode.querySelector('[data-v="toggle"]');
+  assert(hold.getAttribute('aria-pressed') === 'true', 'Hold remains the default');
+  toggle.click(); await new Promise(resolve => setTimeout(resolve, 20));
+  assert(messages.some(m => m.do === 'set' && m.k === 'talkMode' && m.v === 'toggle'), 'Toggle choice persists through the native bridge');
+  assert(toggle.getAttribute('aria-pressed') === 'true' && hold.getAttribute('aria-pressed') === 'false', 'Selected mode is accessible');
+  assert(d.getElementById('schint').textContent.includes('again to send'), 'Shortcut hint follows toggle mode');
+  assert(d.getElementById('talkhint').textContent.includes('Pauses keep listening'), 'Toggle explains what a pause does');
+  toggle.focus(); assert(d.activeElement === toggle, 'Mode buttons can receive keyboard focus');
+  assert(d.documentElement.scrollWidth <= 780 && mode.scrollWidth <= mode.clientWidth, 'Controls fit the native Settings width');
+  const row = mode.closest('.row'); assert(row.scrollWidth <= row.clientWidth, 'Mode row does not overflow');
+  frame.style.width = '700px'; await new Promise(resolve => requestAnimationFrame(resolve));
+  assert(d.documentElement.scrollWidth <= 700 && row.scrollWidth <= row.clientWidth, 'Controls fit a narrower window');
+  frame.style.width = '780px';
+  load({input: 'type', talkMode: 'toggle'});
+  assert(mode.closest('.group').hidden && d.getElementById('schint').textContent.includes('Return sends'), 'Typing mode shows its own shortcut interaction');
+  load({talkMode: 'toggle'});
+  const change = d.getElementById('change');
+  change.click(); assert(change.textContent === 'Cancel Recording', 'Recording has a visible cancel action');
+  change.click(); await new Promise(resolve => setTimeout(resolve, 20));
+  assert(messages.some(m => m.do === 'cancelRecord') && d.getElementById('caps').textContent.includes('Space'), 'Cancel restores the original shortcut');
+  change.click(); d.querySelector('nav button[data-s="brain"]').click();
+  assert(!d.getElementById('shortcut').classList.contains('rec'), 'Switching tabs cancels recording');
+  d.querySelector('nav button[data-s="general"]').click(); change.click();
+  d.getElementById('talklabel').dispatchEvent(new w.Event('pointerdown', {bubbles: true}));
+  assert(change.textContent === 'Change Shortcut' && d.getElementById('caps').textContent.includes('Space'), 'Clicking away cancels without replacing the shortcut');
+  const use = (asks, usd, secs) => ({asks, usd, secs});
+  w.st.load({prefs, state: {today: use(2, .002, 3), week: use(4, .004, 3.5), all: use(10, .009, 4.2), rules: [], skills: [], plan: {ok: true, text: 'Pro'}}});
+  const stats = d.getElementById('stats').textContent;
+  assert(stats.includes('Avg response4.2 s') && stats.includes('Avg cost0.09¢'), 'Usage shows average response time and cost per ask');
+  w.st.tab('meetings');load({});const saving=d.querySelector('[data-k="meetingSave"]');
+  assert(saving.checked,'Transcript saving is on by default');saving.click();await new Promise(r=>setTimeout(r,20));
+  assert(messages.some(m=>m.do==='set'&&m.k==='meetingSave'&&m.v===false),'Saving switch asks native to stop and handle old meetings');
+  w.st.tab('meetings');await new Promise(r=>setTimeout(r,20));assert(messages.some(m=>m.do==='meetings'),'Meetings tab requests the local archive');
+  const list=[{id:'new',title:'Cedar <review>',started:1791745200,duration:3662,app:'Zoom',summary:'Launch agreed.\nNext steps',status:'Ended'},{id:'old',title:'Budget',started:1791658800,duration:62,app:'Teams',summary:'Budget approved.',status:'Ended'}];
+  const $=id=>d.getElementById(id),wait=ms=>new Promise(r=>setTimeout(r,ms));
+  w.st.meetings({meetings:list,query:''});assert(d.querySelectorAll('.meetingrow').length===2&&d.querySelector('.meetingrow b').textContent==='Cedar <review>','List renders newest-first titles safely');
+  assert(d.querySelector('.meetingrow small').textContent.includes('1 hr 1 min')&&d.querySelector('.meetingrow span').textContent==='Launch agreed.','Rows show date, duration, app and first summary line');
+  d.dispatchEvent(new w.KeyboardEvent('keydown',{key:'ArrowDown',bubbles:true}));assert(d.activeElement===d.querySelectorAll('.meetingrow')[1],'Down arrow selects and focuses the next meeting');
+  d.querySelector('.meetingrow').click();await wait(20);assert(messages.some(m=>m.do==='meetingOpen'&&m.id==='new'),'Return-capable row opens by ID');
+  const detail={...list[0],notes:'Pilot notes',answers:[{question:'When?',lines:['Friday']}],action_items:['Send pilot notes'],transcript:[{seconds:62,speaker:'You',text:'We agreed Friday.'},{seconds:80,speaker:'Zoom',text:'Confirmed <script>.'}]};
+  w.st.meetings({meeting:detail,markdown:'# Cedar\nTranscript'});w.st.meetings({meeting:{...detail,id:'stale'},markdown:'stale'});assert($('meetingtitle').textContent==='Cedar <review>','A stale detail response cannot replace the requested meeting');assert($('meetingbrowse').hidden&&!$('meetingdetail').hidden&&$('meetingsummary').textContent==='Launch agreed.\nNext steps','Open shows summary first');
+  assert($('meetingtranscript').textContent.includes('00:01:02YouWe agreed Friday.')&&$('meetingtranscript').textContent.includes('Confirmed <script>.'),'Full transcript has timestamps, speakers and safe selectable text');
+  assert(!$('meetingactionblock').hidden&&$('meetingactions').textContent.includes('Send pilot notes')&&$('meetingnotes').textContent==='Pilot notes','Detail includes action items and notes');
+  $('meetingcopy').click();$('meetingexport').click();await wait(20);assert(messages.some(m=>m.do==='meetingCopy'&&m.text.includes('Transcript'))&&messages.some(m=>m.do==='meetingExport'&&m.id==='new'),'Copy and export use native clipboard and save dialog');
+  $('meetingdelete').click();await wait(20);assert(messages.some(m=>m.do==='meetingDelete'&&m.id==='new')&&!$('meetingdetail').hidden,'Delete waits for native confirmation before removing anything');
+  w.st.meetings({deleted:'new'});await wait(20);assert(!$('meetingbrowse').hidden&&$('meetingdetail').hidden,'Confirmed deletion returns to the list');w.st.meetings({meetings:[list[1]],query:''});assert(d.querySelectorAll('.meetingrow').length===1,'Deleted meeting disappears after refresh');
+  $('meetingq').value='budget';$('meetingq').dispatchEvent(new w.Event('input'));await wait(200);assert(messages.some(m=>m.do==='meetings'&&m.query==='budget'),'Search covers the native title/transcript index');
+  w.st.meetings({meetings:list,query:'stale'});assert(d.querySelectorAll('.meetingrow').length===1,'Stale search responses cannot replace current matches');
+  w.st.meetings({meetings:[list[1]],query:'budget'});assert($('meetingcount').textContent==='1 meeting found','Search renders filtered matches');
+  $('meetingq').focus();$('meetingq').dispatchEvent(new w.KeyboardEvent('keydown',{key:'Enter',bubbles:true}));await wait(20);assert(messages.some(m=>m.do==='meetingOpen'&&m.id==='old'),'Return from search opens the selection');
+  d.querySelector('.meetingrow').click();w.st.meetings({meeting:{...detail,id:'old'},markdown:'MD'});d.dispatchEvent(new w.KeyboardEvent('keydown',{key:'f',metaKey:true,bubbles:true,cancelable:true}));assert(!$('meetingbrowse').hidden&&d.activeElement===$('meetingq'),'Command-F returns to search');
+  d.querySelector('.meetingrow').click();w.st.meetings({meeting:{...detail,id:'old'},markdown:'MD'});d.dispatchEvent(new w.KeyboardEvent('keydown',{key:'Escape',bubbles:true,cancelable:true}));assert(!$('meetingbrowse').hidden,'Escape goes back from detail');
+  $('meetingq').value='no-match';w.st.meetings({meetings:[],query:'no-match'});assert($('meetinglist').textContent.includes('No meetings match'),'Empty search gives a calm recovery hint');
+  w.st.meetings({error:'Could not load'});assert($('meetingmessage').textContent==='Could not load','Archive failures have a visible status');w.st.motion(true);assert(d.body.classList.contains('reduce'),'Dashboard respects native Reduce Motion');
+  assert(d.documentElement.scrollWidth<=780,'Meeting dashboard fits Settings');
+  results.textContent = checks.join('\n') + `\n\n${checks.length} checks passed.`; results.className = 'pass';
+} catch (error) { results.textContent = checks.join('\n') + '\n✗ ' + error.message; results.className = 'fail'; }
+</script></html>

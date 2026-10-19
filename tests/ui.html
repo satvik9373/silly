@@ -1,0 +1,218 @@
+<!doctype html>
+<html lang="en"><meta charset="utf-8"><title>Atticus UI regression checks</title>
+<style>
+  body { background: #141416; color: #f5f5f7; font: 14px system-ui; margin: 32px; }
+  iframe { width: 460px; height: 540px; border: 0; border-radius: 18px; background: #262629; }
+  pre { white-space: pre-wrap; line-height: 1.8; } .pass { color: #30d158; } .fail { color: #ff453a; }
+</style>
+<h1>Atticus UI regression checks</h1><p>Local fixture. No microphone, Claude, clipboard, or Mac actions.</p>
+<pre id="results">Running…</pre><iframe id="preview" title="Atticus overlay preview"></iframe>
+<script type="module">
+const results = document.getElementById('results'), frame = document.getElementById('preview');
+const messages = [], checks = [];
+const assert = (condition, name) => { if (!condition) throw Error(name); checks.push('✓ ' + name); };
+try {
+  const html = await (await fetch('../ui/ui.html')).text(), orbs = await (await fetch('../ui/orbs.js')).text();
+  const ready = new Promise(resolve => window.addEventListener('message', e => {
+    if (e.source !== frame.contentWindow) return;
+    messages.push(e.data); if (e.data.ready) resolve();
+  }));
+  const bridge = `<script>
+    window.expireApproval = null;
+    const motionListeners=[],motion={matches:false,addEventListener:(name,f)=>motionListeners.push(f)},media=window.matchMedia;
+    window.matchMedia=q=>q.includes('prefers-reduced-motion')?motion:media(q);
+    window.fixtureReduced=on=>{motion.matches=on;motionListeners.forEach(f=>f({matches:on}));};
+    const later = window.setTimeout;
+    window.setTimeout = (f, ms, ...args) => ms === 60000 ? (window.expireApproval = f, 0) : later(f, ms, ...args);
+    window.webkit = {messageHandlers: {c: {postMessage: m => parent.postMessage(m, '*')}, h: {postMessage: () => {}}}};
+  <\/script>`;
+  frame.srcdoc = html.replace('/*ORBS*/', () => orbs).replace('<head>', '<head>' + bridge);
+  await Promise.race([ready, new Promise((_, reject) => setTimeout(() => reject(Error('UI did not initialize')), 5000))]);
+  const w = frame.contentWindow, d = w.document, ui = w.ui;
+  await new Promise(r => { let n = 0; const f = () => ++n >= 3 ? r() : w.requestAnimationFrame(f); w.requestAnimationFrame(f); setTimeout(r, 3000); });   // a fresh page draws its first frames late on a slow Mac or VM: timed checks start once frames run
+  const tap = el => { const r = el.getBoundingClientRect(); ui.tap([r.x + r.width / 2, r.y + r.height / 2]); };
+  ui.listen();
+  assert(!d.getElementById('comp').classList.contains('open'), 'Voice starts with the typing box hidden');
+  ui.hover(true); assert(d.getElementById('comp').classList.contains('open'), 'Hover reveals the typing box');
+  ui.hover(false); await new Promise(resolve => setTimeout(resolve, 280));
+  assert(!d.getElementById('comp').classList.contains('open') && d.getElementById('comp').offsetHeight === 0, 'Leaving smoothly collapses an untouched composer');
+  ui.hover(true); d.getElementById('ask').focus(); ui.hover(false);
+  assert(d.getElementById('comp').classList.contains('open'), 'Focused typing stays open on mouse exit');
+  d.getElementById('ask').value = 'Keep my draft'; d.getElementById('ask').blur();
+  assert(d.getElementById('comp').classList.contains('open'), 'A typed draft survives mouse exit and blur');
+  d.getElementById('ask').value = ''; ui.reset(); ui.listen();
+  assert(d.querySelectorAll('.turn').length === 1 && ((d.getElementById('status').textContent + d.getElementById('thread').textContent).match(/Listening…/g) || []).length === 1, 'Listening is shown once');
+  assert(w.getComputedStyle(d.querySelector('.q')).display !== 'none' && w.getComputedStyle(d.querySelector('.q'), '::before').content.includes('Listening'), 'Voice shows a Listening bubble before speech');
+  ui.words('');
+  assert(w.getComputedStyle(d.querySelector('.q')).display !== 'none', 'Empty speech updates keep the Listening bubble');
+  ui.shortcut('Press again to send');
+  assert(d.getElementById('status').textContent === 'Listening…', 'Listening says just Listening, no send hint');
+  ui.line('· Preparing a response');
+  assert(d.getElementById('status').textContent === 'Listening…', 'Early reasoning keeps Listening');
+  ui.words('Open Notes');
+  assert(w.getComputedStyle(d.querySelector('.q')).display !== 'none', 'Speech reveals the transcript bubble');
+  assert(!d.querySelector('.elapsed'), 'Speaking does not count as response time');
+  ui.think();
+  const elapsed = d.querySelector('.elapsed b');
+  await new Promise(resolve => setTimeout(resolve, 65));
+  assert(/^\d+\.\d{2} s$/.test(elapsed.textContent) && parseFloat(elapsed.textContent) > 0, 'Elapsed response time counts in hundredths');
+  ui.think(); assert(d.querySelectorAll('.elapsed').length === 1, 'Repeated thinking keeps one timer');
+  assert(d.getElementById('status').textContent === 'Thinking…', 'Sending switches to Thinking');
+  ui.line('✓ Notes is open.');
+  const completedTime = elapsed.textContent;
+  await new Promise(resolve => setTimeout(resolve, 65));
+  assert(elapsed.textContent === completedTime, 'Completion freezes the elapsed time');
+  ui.rewrite(['A polished draft.', 'replace', true]);
+  assert(w.getComputedStyle(d.querySelector('.a')).whiteSpace === 'pre-wrap', 'Rewrite previews preserve line breaks');
+  const bar = d.querySelector('.rewrite');
+  await new Promise(resolve => setTimeout(resolve, 40));
+  tap(bar.querySelector('.go')); bar.lastChild.click();
+  await new Promise(resolve => setTimeout(resolve, 30));
+  assert(messages.some(m => m.replace === true) && messages.some(m => m.copy === 'A polished draft.'), 'Rewrite actions replace or copy the reviewed draft');
+  ui.replaced(false);
+  assert(bar.querySelector('.go').disabled && d.querySelector('.rewrite-note').textContent.includes('Selection changed'), 'Stale selection shows recovery and disables replacement');
+  ui.rewrite(['Hi Dana,', 'draft', true]);
+  assert(d.querySelector('.rewrite .go').textContent === 'Insert', 'A draft with a cursor target offers Insert first');
+  ui.replaced(true); assert(d.querySelector('.rewrite-note').textContent === 'Inserted', 'Insert confirms');
+  ui.rewrite(['Hi Dana,', 'draft', false]);
+  assert(d.querySelector('.rewrite .go').textContent === 'Copy', 'A draft with no cursor target offers Copy first');
+  ui.listen(true); assert(!d.querySelector('.rewrite'), 'New requests remove stale replacement actions'); ui.words('Open Safari'); ui.think(); ui.line('✓ Safari is open.');
+  tap(d.querySelector('.a'));
+  await new Promise(resolve => setTimeout(resolve, 30));
+  assert(messages.some(m => m.copy === 'Notes is open.'), 'Copying an older answer copies that answer');
+  tap(d.querySelector('.q'));
+  assert(d.getElementById('ask').value === 'Open Notes', 'Click a transcript to edit it');
+  d.getElementById('ask').value = '';
+  d.getElementById('ask').dispatchEvent(new w.KeyboardEvent('keydown', {key: 'ArrowUp', bubbles: true}));
+  assert(d.getElementById('ask').value === 'Open Safari', 'Up arrow recalls the latest request');
+  ui.draft('Please check these partial words');
+  assert(d.getElementById('ask').value === 'Please check these partial words' && d.activeElement === d.getElementById('ask'), 'Unconfirmed speech is editable and focused');
+  ui.ask(['Send this?', 'echo preview']);
+  assert(!!d.querySelector('.ok'), 'Approval card is visible');
+  ui.stopped('Answer stopped');
+  const stoppedTime = d.querySelector('.turn:last-child .elapsed b')?.textContent;
+  await new Promise(resolve => setTimeout(resolve, 65));
+  assert(d.querySelector('.turn:last-child .elapsed b')?.textContent === stoppedTime, 'Cancellation stops the timer');
+  assert(!d.querySelector('.ok'), 'Cancelling removes approval controls');
+  ui.ask(['Send this?', 'echo preview']); w.expireApproval();
+  assert(!d.querySelector('.ok'), 'Expired approval cannot be clicked');
+  ui.ask(['Couldn’t finish this', 'Try the same model or Sonnet.', 'escalate', 'retry']);
+  assert([...d.querySelectorAll('.ok div button')].map(b=>b.textContent).join(' · ')==='Not now · Retry · Try Sonnet', 'Failure card has distinct Retry and Sonnet buttons');
+  assert(d.querySelector('.ok .go').textContent==='Try Sonnet', 'Sonnet is the main blue action');
+  ui.respond('maybe later'); assert(d.querySelector('.ok.retry:not(.gone)') && d.getElementById('ask').value==='maybe later', 'A reply that is not an answer keeps the card and shows what was heard');
+  ui.respond('Um, try again, please.'); await new Promise(r=>setTimeout(r,380));
+  assert(messages.some(m=>m.pick==='r'), 'Spoken or typed try again answers Retry');
+  ui.improve(); ui.improve(); const imp = d.querySelectorAll('.ok.improve');
+  assert(imp.length === 1 && imp[0].querySelector('.go').textContent === 'Help Improve', 'The help-improve question shows once, Help Improve in blue');
+  imp[0].querySelector('.go').click(); await new Promise(r=>setTimeout(r,380));
+  assert(messages.some(m=>m.improve===true) && !d.querySelector('.ok.improve'), 'Help Improve says yes and the card goes');
+  ui.ask(['Couldn’t finish this', 'Try again.', '', 'retry']);
+  assert(d.querySelectorAll('.ok div button').length===2 && !d.querySelector('.ok .off'), 'Disabling Sonnet keeps Retry and hides only the Sonnet offer');
+  ui.respond('yes'); await new Promise(r=>setTimeout(r,380)); assert(messages.filter(m=>m.pick==='r').length===2,'Yes on a retry-only card means Retry');
+  ui.ask(['Couldn’t finish this', 'Try again.', '', 'retry']);
+  d.getElementById('ask').value='retry'; d.getElementById('ask').dispatchEvent(new w.KeyboardEvent('keydown',{key:'Enter',bubbles:true}));
+  await new Promise(r=>setTimeout(r,380)); assert(messages.filter(m=>m.pick==='r').length===3,'Typed Retry reaches the same answer channel');
+  ui.ask(['Couldn’t finish this', 'Try Sonnet.', 'escalate', 'retry']);
+  tap(d.querySelector('.ok .go')); await new Promise(r=>setTimeout(r,380)); assert(messages.some(m=>m.pick==='y'),'Sonnet has its own answer value');
+  ui.ask(['Couldn’t finish this', 'Try Sonnet.', 'escalate', 'retry']);
+  d.querySelector('.ok .off').click(); await new Promise(r=>setTimeout(r,380)); assert(messages.some(m=>m.off==='escalate')&&messages.some(m=>m.pick==='n'),'Don’t ask again disables only Sonnet and declines this attempt');
+  ui.reset(); ui.listen(true); ui.words('Open my essay'); ui.think();
+  ui.pick({q: 'Which essay?', options: [{label: 'essay.pdf', sub: '~/Documents · Oct 9, 2026', img: 'data:image/gif;base64,R0lGODlhAQABAAAAACw='}, {label: 'essay.docx', sub: '~/Desktop', img: '', kind: 'DOCX'}]});
+  const choice = i => d.querySelectorAll('.pk .c')[i];
+  const paused = d.querySelector('.turn:last-child .elapsed b').textContent; await new Promise(resolve => setTimeout(resolve, 65));
+  assert(d.querySelector('.turn:last-child .elapsed b').textContent === paused, 'The timer pauses while the choices wait for you');
+  assert(d.querySelectorAll('.pk .c').length === 2 && choice(1).textContent.startsWith('DOCX'), 'Choices card shows every option, a file type when there is no preview');
+  tap(choice(1));
+  assert(d.querySelector('.pk.open .c.on') === choice(1), 'Clicking a choice shows it big');
+  tap(d.querySelector('.pk > b'));
+  assert(!d.querySelector('.pk.open'), 'Clicking outside it shows all the choices again');
+  tap(d.querySelector('.pk .other')); assert(d.activeElement === d.querySelector('.pk .other'), 'Clicking "Something else" puts the cursor in it');
+  tap(choice(0)); d.querySelector('.pk .go').scrollIntoView({block: 'nearest', behavior: 'instant'}); tap(d.querySelector('.pk .go')); await new Promise(resolve => setTimeout(resolve, 30));
+  assert(messages.some(m => m.pick === '0') && d.querySelector('.step.done')?.textContent === 'Picked essay.pdf', 'Use this sends the one picked');
+  for(let i=0;i<10&&d.querySelector('.turn:last-child .elapsed b').textContent===paused;i++)await new Promise(r=>setTimeout(r,50));
+  assert(d.querySelector('.turn:last-child .elapsed b').textContent !== paused, 'The timer runs again after you pick');
+  ui.pick({q: 'Which song?', options: [{label: 'Yellow', sub: '', img: ''}, {label: 'Fix You', sub: '', img: ''}]});
+  tap(choice(1)); await new Promise(resolve => setTimeout(resolve, 30));
+  assert(messages.some(m => m.pick === '1'), 'Without previews one click picks');
+  ui.pick({q: 'Which song?', options: [{label: 'Yellow', sub: '', img: ''}]});
+  d.getElementById('ask').value = 'the live version'; d.getElementById('ask').dispatchEvent(new w.KeyboardEvent('keydown', {key: 'Enter'})); await new Promise(resolve => setTimeout(resolve, 30));
+  assert(messages.some(m => m.pick === '=the live version') && !messages.some(m => m.send === 'the live version'), 'Typing in the main box answers an open choices card');
+  ui.pick({q: 'Which song?', options: [{label: 'Yellow', sub: '', img: ''}]}); ui.stopped('Answer stopped');
+  assert(!d.querySelector('.pk'), 'Cancelling removes the choices');
+  ui.reset(); ui.listen(true);
+  ui.limit(280); ui.compose(true); await new Promise(resolve => setTimeout(resolve, 280)); ui.hold(1000);
+  assert(d.getElementById('card').offsetHeight <= 280, 'Manual resize fits the available screen');
+  assert(d.getElementById('comp').getBoundingClientRect().bottom <= 280, 'Composer remains reachable after resize');
+  ui.reset();
+  assert(d.getElementById('thread').style.maxHeight === '', 'New conversation clears stale resize constraints');
+  ui.listen(true); ui.words('A'.repeat(400)); ui.think(); ui.line('✓ ' + 'https://example.com/' + 'a'.repeat(400));
+  assert(d.getElementById('card').scrollWidth <= 460, 'Long URLs and transcripts do not overflow the card');
+  { const t = d.getElementById('thread'); t.style.maxHeight = '120px'; for (let i = 0; i < 30; i++) ui.line('▸ Scrolling down ' + i);
+    t.scrollTo({ top: 0, behavior: 'instant' }); t.dispatchEvent(new w.WheelEvent('wheel', { deltaY: -40 })); await new Promise(r => setTimeout(r, 30)); ui.line('▸ One more step'); await new Promise(r => setTimeout(r, 120));
+    assert(t.scrollTop === 0, 'Scrolled up to read: a new step does not pull the list back down');
+    t.scrollTo({ top: t.scrollHeight, behavior: 'instant' }); t.dispatchEvent(new w.WheelEvent('wheel', { deltaY: 40 })); await new Promise(r => setTimeout(r, 30)); ui.line('▸ And another'); await new Promise(r => setTimeout(r, 120));
+    assert(t.scrollHeight - t.scrollTop - t.clientHeight < 24, 'At the bottom: new steps keep following'); t.style.maxHeight = ''; }
+  ui.reset(); ui.listen(true); ui.words('Worker completion'); ui.think(); ui.finished();
+  const finishedTime = d.querySelector('.elapsed b').textContent;
+  await new Promise(resolve => setTimeout(resolve, 65));
+  assert(d.querySelector('.elapsed b').textContent === finishedTime, 'Worker exit freezes time even without a final answer');
+  ui.msg('Worker stopped');
+  ui.reset(); ui.listen(true); ui.words('Find tablecloths'); ui.think(); ui.line('▸ Reading the page'); ui.line('✓ Here are tablecloths.');
+  d.querySelector('.redo').click(); await new Promise(resolve => setTimeout(resolve, 30));
+  assert(messages.some(m => m.send?.startsWith("That's wrong, try again: Find tablecloths")), 'Try again resends the ask as a correction');
+  ui.reset(); ui.limit(700); ui.listen(true); ui.words('Work in the background'); ui.think();
+  const target = {pid: 123, windowID: '42', windowFrame: [50,40,1000,600], window: 'Fixture', app: 'Notes', action: 'click'};
+  ui.line('▸ Clicking “Export”'); ui.line('▣ ' + JSON.stringify(target));
+  assert(!d.querySelector('.mini.on'), 'The mini screen waits half a second, so quick tasks never flash it');
+  await new Promise(resolve => setTimeout(resolve, 960));
+  assert(d.querySelector('.mini.on') && d.querySelector('.mini').compareDocumentPosition(d.querySelector('.steps')) & 4, 'Mini screen appears above this turn’s steps');
+  assert(d.querySelector('.mini-tag span').textContent === target.app, 'Mini tag names the app; the steps show the action');
+  const fixedTop=d.querySelector('.mini-view').getBoundingClientRect().top;
+  for(let i=2;i<=12;i++){
+    ui.line('▸ Background step '+i);
+    if(i===4||i===12){const shown=()=>{const v=d.querySelector('.mini-view').getBoundingClientRect(),t=d.getElementById('thread').getBoundingClientRect();return Math.abs(v.top-fixedTop)<1&&v.top>=t.top&&v.bottom<=t.bottom};
+      for(let ms=0;ms<2000&&(ms<400||!shown());ms+=50)await new Promise(r=>setTimeout(r,50));   // settled, or 2 s on a slow machine
+      const rect=d.querySelector('.mini-view').getBoundingClientRect(),thread=d.getElementById('thread').getBoundingClientRect(),latest=d.querySelector('.step:last-child').getBoundingClientRect();
+      assert(Math.abs(rect.top-fixedTop)<1&&rect.top>=thread.top&&rect.bottom<=thread.bottom,'Mini remains fully visible at '+i+' steps');
+      assert(latest.top>=rect.bottom&&latest.bottom<=thread.bottom,'Newest step remains readable at '+i+' steps');}
+  }
+  assert(w.getComputedStyle(d.querySelector('.steps')).webkitMaskImage.includes('linear-gradient'),'Older steps fade under the pinned mini');
+  assert(d.querySelectorAll('.step').length===4,'Long tasks keep a bounded step stack');
+  ui.line('▸ Interrupted arrival'); await new Promise(r=>setTimeout(r,60));
+  const arriving=d.querySelector('.step:last-child'),arrivalTop=arriving.getBoundingClientRect().top;
+  ui.line('▸ A newer arrival');
+  assert(Math.abs(arriving.getBoundingClientRect().top-arrivalTop)<2,'A new step continues the interrupted slide without jumping');
+  w.fixtureReduced(true);
+  assert([...d.querySelectorAll('.step')].every(e=>!e.getAnimations().length),'Enabling Reduce Motion cancels step animations');
+  ui.line('▸ Reduced-motion step');assert(!d.querySelector('.step:last-child').getAnimations().length,'Reduce Motion adds steps without sliding');
+  w.fixtureReduced(false);
+  const intervals=[];let lastFrame;
+  await new Promise(resolve=>{const sample=now=>{if(lastFrame)intervals.push(now-lastFrame);lastFrame=now;if(intervals.length<45){if(intervals.length%6===0)ui.line('▸ Cadence '+intervals.length);w.requestAnimationFrame(sample);}else resolve();};w.requestAnimationFrame(sample);});
+  const cadence=[...intervals].sort((a,b)=>a-b)[22],slow=intervals.filter(ms=>ms>25).length;
+  assert(Number.isFinite(cadence)&&Math.abs(d.querySelector('.mini-view').getBoundingClientRect().top-fixedTop)<1,'Mini stays pinned during animated arrivals; median frame '+cadence.toFixed(2)+' ms, '+slow+'/45 frames over 25 ms');
+  ui.line('@ 550 340');
+  const point = d.querySelector('.mini-point'), view = d.querySelector('.mini-view');
+  assert(Math.abs(parseFloat(point.style.left)-view.clientWidth/2) < 1 && Math.abs(parseFloat(point.style.top)-view.clientHeight/2) < 1, 'Screen coordinates map to the thumbnail with letterboxing');
+  ui.line('▸ Typing into “Name”'); ui.mini({...target, action:'type'}); ui.line('@ 550 340');
+  assert(d.querySelector('.mini-point.type') && d.querySelector('.step:last-child')?.textContent.includes('Typing'), 'Typing adds a caret and updates the caption');
+  ui.mini({...target, action:'scroll', direction:'up'}); ui.line('@ 550 340');
+  assert(d.querySelector('.mini-point.scroll').style.getPropertyValue('--dy') === '-14px', 'Scroll feedback follows its direction');
+  ui.line('@ 99999 99999'); assert(d.querySelectorAll('.mini-point').length === 1, 'Out-of-window points add no misplaced feedback');
+  view.scrollIntoView({block:'nearest',behavior:'instant'}); tap(view); await new Promise(resolve => setTimeout(resolve, 30));
+  assert(messages.some(m => m.miniOpen), 'Clicking the thumbnail posts go there');
+  assert(messages.some(m => m.miniRect?.rect[2] > 0), 'Thumbnail reports native frame geometry');
+  ui.mini({...target, shown:false}); assert(!d.querySelector('.mini.on') && d.querySelector('.mini').inert, 'Fully visible targets quietly collapse and cannot take keyboard focus');
+  ui.mini({...target, shown:true, live:false}); assert(d.querySelector('.mini.on:not(.live)'), 'Permission fallback keeps the window title in the same frame');
+  ui.mini({...target, windowID:'43', window:'Second', live:true});
+  assert(d.querySelectorAll('.mini').length === 1 && view.getAttribute('aria-label') === 'Open Second', 'Target changes reuse one thumbnail and name the exact window');
+  ui.line('✓ Finished'); assert(d.querySelector('.mini.done.on'), 'Completion holds the last frame with a check');
+  await new Promise(resolve => setTimeout(resolve, 1850)); assert(d.querySelector('.mini.on'), 'Completed thumbnail holds for two seconds');
+  await new Promise(resolve => setTimeout(resolve, 650)); assert(d.querySelector('.mini.done.on'), 'Completed thumbnail stays until the next interaction'); d.getElementById('ask').value='Next'; d.getElementById('ask').dispatchEvent(new w.Event('input')); assert(!d.querySelector('.mini'), 'Typing clears the completed thumbnail');await new Promise(r=>setTimeout(r,20));assert(messages.some(m=>m.miniClear),'Typing releases the native held preview too');
+  ui.mini(target); ui.line('✓ Finished'); ui.listen(true); ui.words('Next task'); ui.mini(target);
+  await new Promise(resolve => setTimeout(resolve, 2500)); assert(d.querySelector('.mini.on'), 'An old completion timer cannot remove the next turn’s thumbnail');
+  ui.stopped('Stopped'); assert(!d.querySelector('.mini'), 'Cancellation clears the thumbnail immediately');
+  ui.reset(); ui.listen(true); ui.words('Put Notes on the left.'); ui.think();
+  ui.line('▸ Moving Notes → left'); ui.line('✓ Notes is on the left.'); ui.compose(true);
+  results.textContent = checks.join('\n') + `\n\n${checks.length} checks passed.`; results.className = 'pass';
+} catch (error) { results.textContent = checks.join('\n') + '\n✗ ' + error.message; results.className = 'fail'; }
+</script></html>

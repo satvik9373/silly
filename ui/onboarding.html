@@ -1,0 +1,270 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<!-- Silly first-run window. Silly.exe loads this (orbs.js goes in place of the marker), calls ob.set({...}) every second
+     with which permissions are on, and gets {do:'grant', id} / {do:'done'} back. -->
+<style>
+  @font-face { font-family: "Satoshi"; src: url("assets/fonts/Satoshi-Variable.ttf") format("truetype"); font-style: normal; font-weight: 300 500; font-display: swap; }
+  :root {
+    --fg: #1d1d1f; --fg2: #6e6e73; --fg3: #86868b; --card: rgba(255,255,255,.62); --line: rgba(0,0,0,.08);
+    --key-top: #fdfdfd; --key-bot: #e8e8ed; --key-edge: rgba(0,0,0,.16); --accent: #0a84ff; --green: #28c840;
+    --glow: rgba(120,140,255,.28); --ease: cubic-bezier(.4,0,.2,1); --out: cubic-bezier(.16,1,.3,1); --spring: cubic-bezier(.34,1.56,.64,1);
+    --font-sans: "Satoshi", system-ui, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) { :root {
+    --fg: #f5f5f7; --fg2: #a1a1a6; --fg3: #8e8e93; --card: rgba(255,255,255,.06); --line: rgba(255,255,255,.08);
+    --key-top: #3a3a3c; --key-bot: #2c2c2e; --key-edge: rgba(0,0,0,.55); --glow: rgba(110,130,255,.22);
+  } }
+  html, body { margin: 0; height: 100%; background: transparent; overflow: hidden; -webkit-user-select: none; cursor: default;
+    font: 400 13px var(--font-sans); letter-spacing: -.01em; color: var(--fg); -webkit-font-smoothing: antialiased; }
+  button, input, textarea, select, kbd { font-family: var(--font-sans); }
+
+  .page { position: absolute; inset: 0 0 56px; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    padding: 0 56px; text-align: center; opacity: 0; pointer-events: none; transform: translateX(40px); filter: blur(6px);
+    transition: opacity .5s var(--ease), transform .6s var(--out), filter .5s var(--ease); }
+  .page.on { opacity: 1; pointer-events: auto; transform: none; filter: none; }
+  .page.gone { transform: translateX(-40px); transition-duration: .35s; }
+
+  h1 { font: 500 34px/1.1 var(--font-sans); letter-spacing: -.025em; margin: 18px 0 10px; }
+  h2 { font: 500 24px/1.15 var(--font-sans); letter-spacing: -.02em; margin: 0 0 8px; }
+  p.sub { font-size: 14px; line-height: 1.5; color: var(--fg2); margin: 0; max-width: 400px; text-wrap: balance; }
+  /* children rise in one after another when their page comes on */
+  .page .r { opacity: 0; transform: translateY(12px); transition: opacity .5s var(--ease), transform .6s var(--out); }
+  .page.on .r { opacity: 1; transform: none; }
+  .page.on .r:nth-child(2) { transition-delay: .07s; } .page.on .r:nth-child(3) { transition-delay: .14s; }
+  .page.on .r:nth-child(4) { transition-delay: .21s; } .page.on .r:nth-child(5) { transition-delay: .28s; }
+
+  #orbwrap { position: relative; width: 128px; height: 128px; }
+  #orbwrap::before { content: ""; position: absolute; inset: -60px; border-radius: 50%;
+    background: radial-gradient(closest-side, var(--glow), transparent); animation: drift 7s ease-in-out infinite; }
+  #orb { position: relative; width: 128px; height: 128px; }
+
+  .keys { display: flex; gap: 8px; justify-content: center; margin-top: 26px; }
+  .key { min-width: 40px; height: 40px; padding: 0 12px; box-sizing: border-box; border-radius: 9px; display: grid; place-items: center;
+    font: 500 15px var(--font-sans); letter-spacing: -.015em; color: var(--fg2); background: linear-gradient(var(--key-top), var(--key-bot));
+    box-shadow: 0 0 0 .5px var(--key-edge), 0 2px 0 var(--key-edge), 0 4px 10px rgba(0,0,0,.08);
+    transition: transform .14s var(--ease), box-shadow .14s var(--ease), color .2s; }
+  .key.wide { min-width: 120px; font-size: 13px; }
+  .key.down { transform: translateY(2px); color: var(--fg); box-shadow: 0 0 0 .5px var(--key-edge), 0 0 0 var(--key-edge), 0 1px 3px rgba(0,0,0,.1); }
+
+  .btn { margin-top: 30px; height: 36px; padding: 0 22px; border: 0; border-radius: 18px; font: 500 14px var(--font-sans); letter-spacing: -.012em; cursor: pointer;
+    color: #fff; background: var(--accent); box-shadow: 0 1px 2px rgba(0,0,0,.15), inset 0 .5px 0 rgba(255,255,255,.25);
+    transition: transform .12s var(--ease), filter .2s, background .3s, color .3s; }
+  .btn:hover { filter: brightness(1.08); } .btn:active { transform: scale(.97); }
+  .btn:focus-visible, .allow:focus-visible { outline: 3px solid rgba(10,132,255,.45); outline-offset: 2px; }
+  .btn.quiet { background: var(--card); color: var(--fg); box-shadow: inset 0 0 0 .5px var(--line); }
+
+  /* permissions list, grouped like System Settings */
+  #list { width: 100%; max-width: 480px; margin-top: 22px; border-radius: 12px; background: var(--card); text-align: left;
+    box-shadow: inset 0 0 0 .5px var(--line), 0 1px 3px rgba(0,0,0,.04); overflow: hidden; }
+  .row { display: flex; align-items: center; gap: 12px; padding: 11px 14px; opacity: 0; transform: translateY(8px);
+    transition: opacity .45s var(--ease), transform .55s var(--out), background .4s; }
+  .row + .row { box-shadow: inset 0 .5px 0 var(--line); }
+  #perms.on .row { opacity: 1; transform: none; }
+  .ic { flex: none; width: 30px; height: 30px; border-radius: 7px; display: grid; place-items: center;
+    box-shadow: inset 0 .5px 0 rgba(255,255,255,.3), 0 .5px 1px rgba(0,0,0,.2); }
+  .ic svg { width: 17px; height: 17px; fill: none; stroke: #fff; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+  .txt { flex: 1; min-width: 0; }
+  .txt b { display: block; font: 500 13px var(--font-sans); }
+  .txt span { display: block; font-size: 12px; color: var(--fg3); margin-top: 1px; }
+  .allow { flex: none; height: 26px; min-width: 64px; padding: 0 12px; border: 0; border-radius: 13px; cursor: pointer;
+    font: 500 12px var(--font-sans); letter-spacing: -.01em; color: var(--accent); background: rgba(10,132,255,.12); transition: transform .12s var(--ease), background .2s, opacity .3s; }
+  .allow:hover { background: rgba(10,132,255,.2); } .allow:active { transform: scale(.95); }
+  .allow.wait { color: var(--fg3); background: transparent; pointer-events: none; }
+  .allow.wait::after { content: ""; display: inline-block; width: 10px; height: 10px; margin-left: 6px; vertical-align: -1px; border-radius: 50%;
+    border: 1.5px solid currentColor; border-right-color: transparent; animation: spin .8s linear infinite; }
+  .check { flex: none; width: 22px; height: 22px; display: none; }
+  .check circle { fill: var(--green); transform-origin: center; animation: pop .45s var(--spring) both; }
+  .check path { fill: none; stroke: #fff; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round;
+    stroke-dasharray: 14; stroke-dashoffset: 14; animation: draw .35s .15s var(--ease) forwards; }
+  .row.ok .allow { display: none; } .row.ok .check { display: block; margin: 0 21px; }
+  #setup-status { margin-top: 14px; font-size: 12px; color: var(--fg3); transition: color .3s; }
+  #setup-status.ready { color: var(--green); }
+
+  /* try it: keys light up as the user holds them, then turn green once Silly hears the hotkey */
+  .keys.big { margin-top: 30px; gap: 10px; } .keys.big .key { height: 52px; min-width: 52px; font-size: 19px; border-radius: 11px; }
+  .keys.big .key.wide { min-width: 160px; font-size: 15px; }
+  .key.lit { transform: translateY(2px); color: #fff; background: linear-gradient(#3d9bff, var(--accent));
+    box-shadow: 0 0 0 .5px rgba(0,0,0,.3), 0 0 0 4px rgba(10,132,255,.18), 0 0 24px rgba(10,132,255,.45); }
+  .key.yes { color: #fff; background: linear-gradient(#4fd86a, var(--green));
+    box-shadow: 0 0 0 .5px rgba(0,0,0,.3), 0 0 0 4px rgba(40,200,64,.16), 0 0 24px rgba(40,200,64,.4); transition-duration: .35s; }
+  #hint { margin-top: 22px; height: 18px; font-size: 13px; color: var(--fg3); transition: color .3s; }
+  #hint.yes { color: var(--green); }
+  /* done: the check pops and draws each time the page comes on */
+  #done-check { width: 64px; height: 64px; margin-bottom: 18px; filter: drop-shadow(0 6px 18px rgba(40,200,64,.35)); }
+  #done-check circle { fill: var(--green); transform-origin: center; transform: scale(.3); opacity: 0; }
+  #done-check path { fill: none; stroke: #fff; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 14; stroke-dashoffset: 14; }
+  #done.on #done-check circle { animation: pop .55s .1s var(--spring) forwards; }
+  #done.on #done-check path { animation: draw .4s .4s var(--ease) forwards; }
+  /* try it */
+  /* done: a practice area, so the first tries are the real features */
+  .tries { width: 100%; max-width: 400px; margin-top: 22px; display: grid; gap: 10px; text-align: left; }
+  .try { display: flex; align-items: center; justify-content: space-between; gap: 14px; min-height: 26px; font-size: 14px; color: var(--fg); }
+  .try span { flex: none; font-size: 12px; color: var(--fg3); }
+  #pad { box-sizing: border-box; width: 100%; height: 58px; margin: -2px 0 4px; resize: none; padding: 9px 12px; border: 0; border-radius: 10px;
+    font: 400 13px/1.4 var(--font-sans); color: var(--fg); background: var(--card); box-shadow: inset 0 0 0 .5px var(--line);
+    outline: none; -webkit-user-select: text; cursor: text; caret-color: var(--accent); transition: box-shadow .2s; }
+  #pad::placeholder { color: var(--fg3); }
+  #pad:focus { box-shadow: inset 0 0 0 1px var(--accent), 0 0 0 3px rgba(10,132,255,.18); }
+  #timer { flex: none; height: 26px; padding: 0 12px; border: 0; border-radius: 13px; font: 500 12px var(--font-sans); font-variant-numeric: tabular-nums;
+    color: var(--fg); background: var(--card); box-shadow: inset 0 0 0 .5px var(--line); cursor: pointer; transition: color .3s, box-shadow .3s; }
+  #timer:hover { filter: brightness(1.08); } #timer:active { transform: scale(.97); }
+  #timer:focus-visible { outline: 3px solid rgba(10,132,255,.45); outline-offset: 2px; }
+  #timer.done { color: var(--green); box-shadow: inset 0 0 0 .5px var(--green); }
+  .tips { display: flex; gap: 18px; justify-content: center; margin-top: 20px; font-size: 12px; color: var(--fg3); }
+  .tips kbd { font: 500 11px var(--font-sans); padding: 1px 6px; border-radius: 4px; background: var(--card); box-shadow: inset 0 0 0 .5px var(--line); color: var(--fg2); }
+
+  #dots { position: absolute; bottom: 24px; left: 0; right: 0; display: flex; gap: 6px; justify-content: center; }
+  #dots i { width: 6px; height: 6px; border-radius: 3px; background: var(--fg3); opacity: .35; transition: width .45s var(--out), opacity .3s; }
+  #dots i.on { width: 18px; opacity: .8; }
+
+  @keyframes drift { 50% { transform: translate(6px, -4px) scale(1.06); } }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @keyframes pop { from { transform: scale(.3); opacity: 0; } to { transform: none; opacity: 1; } }
+  @keyframes draw { to { stroke-dashoffset: 0; } }
+  @media (prefers-reduced-motion: reduce) { *, *::before { transition-duration: 1ms !important; animation-duration: 1ms !important; } }
+</style></head>
+<body>
+<section class="page" id="welcome">
+  <div id="orbwrap" class="r"><canvas id="orb"></canvas></div>
+  <h1 class="r">Meet Silly</h1>
+  <p class="sub r" id="welcome-talk">Hold the shortcut, say what you need, let go. Your PC does the rest.</p>
+  <div class="keys r"><div class="key" id="k1">Ctrl</div><div class="key" id="k2">Alt</div><div class="key wide" id="k3">Space</div></div>
+  <button class="btn r" data-go="perms">Get Started</button>
+</section>
+
+<section class="page" id="perms">
+  <h2 class="r">Give Silly a hand</h2>
+  <p class="sub r">Set up voice once, then Silly is ready when you are.</p>
+  <div id="list" class="r"></div>
+  <div id="setup-status" class="r"></div>
+  <button class="btn quiet r" id="next" data-go="try">Skip for Now</button>
+</section>
+
+<section class="page" id="try">
+  <h2 class="r">Try it now</h2>
+  <p class="sub r" id="try-talk">Hold the keys anywhere, say anything, then let go. Simple commands can run as you speak; AI actions wait for confirmed words.</p>
+  <div class="keys big r"><div class="key" id="t1">Ctrl</div><div class="key" id="t2">Alt</div><div class="key wide" id="t3">Space</div></div>
+  <div id="hint" class="r">Waiting for you…</div>
+  <button class="btn quiet r" data-go="done">Skip</button>
+</section>
+
+<section class="page" id="done">
+  <svg id="done-check" class="r" viewBox="0 0 22 22"><circle cx="11" cy="11" r="11"/><path d="M6.5 11.3l3 3 6-6.3"/></svg>
+  <h2 class="r">You’re all set</h2>
+  <p class="sub r" id="practice-talk">Try a few. Hold the keys, say it, let go.</p>
+  <div class="tries r">
+    <div class="try">“Open Chrome and snap it left”<span>Instant, no AI</span></div>
+    <div class="try">“Type a haiku about Mondays”<span>Click the box first</span></div>
+    <textarea id="pad" placeholder="Practice box" aria-label="Practice box"></textarea>
+    <div class="try">“Tell me when the timer is done”<button id="timer">Start a 20 s timer</button></div>
+  </div>
+  <div class="tips r"><div><kbd>esc</kbd> stops an answer</div><div>Click away to close</div></div>
+  <button class="btn r" id="finish">Start Using Silly</button>
+</section>
+
+<div id="dots"><i></i><i></i><i></i><i></i></div>
+
+<script type="text/plain" id="orbsrc">/*ORBS*/</script>
+<script type="module">
+  const $ = id => document.getElementById(id);
+  const post = m => window.webkit?.messageHandlers.ob.postMessage(m);
+  const pages = ['welcome', 'perms', 'try', 'done'];
+  let cur = '';
+  const go = id => {
+    if (cur) { $(cur).classList.remove('on'); $(cur).classList.add('gone'); const c = cur; setTimeout(() => $(c).classList.remove('gone'), 600); }
+    cur = id; $(id).classList.add('on');
+    [...$('dots').children].forEach((d, i) => d.classList.toggle('on', pages[i] === id));
+  };
+  document.querySelectorAll('[data-go]').forEach(b => b.onclick = () => go(b.dataset.go));
+  $('finish').onclick = () => post({ do: 'done' });
+
+  // Permissions: icon color + SF-style glyph, why it's needed.
+  const P = [
+    ['mic', 'Microphone', 'Listens when you start a voice request.', '#ff9f0a', '<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21"/>'],
+    ['speech', 'Speech Model', 'Turns your words into text on this PC. About 150 MB, once.', '#8e8e93', '<path d="M4 10v4M8 7v10M12 4v16M16 8v8M20 11v2"/>'],
+  ];
+  $('list').innerHTML = P.map(([id, name, why, color, svg], i) => `
+    <div class="row" id="p-${id}" style="transition-delay:${.25 + i * .06}s">
+      <div class="ic" style="background:${color}"><svg viewBox="0 0 24 24">${svg}</svg></div>
+      <div class="txt"><b>${name}</b><span>${why}</span></div>
+      <button class="allow" data-id="${id}">${id === 'speech' ? 'Download' : 'Allow'}</button>
+      <svg class="check" viewBox="0 0 22 22"><circle cx="11" cy="11" r="11"/><path d="M6.5 11.3l3 3 6-6.3"/></svg>
+    </div>`).join('');
+  document.querySelectorAll('.allow').forEach(b => b.onclick = () => {
+    const was = b.textContent; b.classList.add('wait'); b.textContent = 'Waiting';
+    setTimeout(() => { b.classList.remove('wait'); b.textContent = was; }, 12000);   // gave up in System Settings
+    post({ do: 'grant', id: b.dataset.id });
+  });
+
+  window.ob = {
+    mode(toggle) {
+      $('welcome-talk').textContent = (toggle ? 'Press the shortcut, speak, press again to send.' : 'Hold the shortcut, speak, release to send.') + ' Your PC does the rest.';
+      $('try-talk').textContent = (toggle ? 'Press the shortcut anywhere. Say what you need, then press again to send.' : 'Hold the keys anywhere, say what you need, then let go.') + ' Simple commands can run as you speak; AI actions wait for confirmed words.';
+      $('practice-talk').textContent = toggle ? 'Try a few. Press to talk, press again to send. Esc cancels.' : 'Try a few. Hold the keys, say it, let go. Esc cancels.';
+    },
+    keys(ctrl, opt) {   // live modifier state, many times a second
+      const k = KEYS[cur];
+      if (!k || $(k[2]).classList.contains('yes')) return;
+      $(k[0]).classList.toggle('lit', ctrl); $(k[1]).classList.toggle('lit', opt);
+    },
+    tried() {   // the hotkey fired: keys go green, then on to the next step
+      const k = KEYS[cur];
+      if (!k || $(k[2]).classList.contains('yes')) return;
+      k.forEach((id, i) => setTimeout(() => { $(id).classList.remove('lit', 'down'); $(id).classList.add('yes'); }, i * 70));
+      { $('hint').textContent = 'That’s it. Silly is listening.'; $('hint').classList.add('yes'); }
+      setTimeout(() => go('done'), 1500);
+    },
+    progress(id, p) {   // the speech model downloading
+      const row = $('p-' + id); if (!row) return;
+      row.querySelector('.allow').textContent = Math.round(p * 100) + '%';
+    },
+    set(s) {
+      let n = 0;
+      for (const [id] of P) {
+        const row = $('p-' + id);
+        row.classList.toggle('ok', !!s[id]);
+        if (s[id]) n++;
+      }
+      $('setup-status').textContent = n === P.length ? 'Voice setup complete' : 'You can finish voice setup later in Settings.';
+      $('setup-status').classList.toggle('ready', n === P.length);
+      $('next').textContent = n === P.length ? 'Continue' : 'Skip for Now';
+      $('next').classList.toggle('quiet', n !== P.length);
+    },
+  };
+
+  // Welcome keys press in, hold, let go: the gesture itself.
+  const KEYS = { try: ['t1', 't2', 't3'] };   // only the try page reacts; the welcome keys are a demo
+  const keys = ['k1', 'k2', 'k3'].map($);   // the welcome demo keys
+  const press = () => {
+    if (cur !== 'welcome') return setTimeout(press, 1500);
+    keys.forEach((k, i) => setTimeout(() => k.classList.add('down'), i * 130));
+    setTimeout(() => keys.forEach(k => k.classList.remove('down')), 2100);
+    setTimeout(press, 3600);
+  };
+  setTimeout(press, 1200);
+
+  // Something to watch: "seconds left" goes away when it ends, so a watch has a clear thing to wait for.
+  let tick;
+  $('timer').onclick = () => {
+    let n = 20; clearInterval(tick);
+    const show = () => { $('timer').textContent = n > 0 ? `${n} seconds left` : 'Timer done'; $('timer').classList.toggle('done', n <= 0); };
+    show(); tick = setInterval(() => { n--; show(); if (n <= 0) clearInterval(tick); }, 1000);
+  };
+
+  go('welcome');
+
+  // The same orb as the overlay, breathing.
+  try {
+    const E = await import(URL.createObjectURL(new Blob([$('orbsrc').textContent], { type: 'text/javascript' })));
+    const cv = $('orb'), ctx = cv.getContext('2d'), S = 64, dpr = 4, preset = E.r('breathing', S);
+    cv.width = cv.height = S * dpr;
+    let t = 0, prev = performance.now();
+    (function frame(now) {
+      t += (now - prev) / 1000 * preset.speed; prev = now;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, S, S);
+      E.p(ctx, E.M[preset.mode](S, t, preset.opts), true, null);
+      requestAnimationFrame(frame);
+    })(prev);
+  } catch (e) {}
+</script>
+</body></html>

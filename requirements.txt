@@ -1,0 +1,5 @@
+mss==9.0.2
+pillow==11.0.0
+psutil==6.1.0
+uiautomation==2.0.29
+cryptography==50.0.0

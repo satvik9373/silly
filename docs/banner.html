@@ -1,0 +1,44 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<!-- The README banner. Re-render (2400×800) with docs/banner.ps1; the orb is drawn by ui/orbs.js, the same engine as the app. -->
+<title>Silly banner</title>
+<style>
+  html, body { margin: 0; width: 2400px; height: 800px; overflow: hidden; }
+  body {
+    background:
+      radial-gradient(900px 700px at 660px 400px, #ffffff 0%, rgba(255,255,255,0) 70%),
+      radial-gradient(1100px 600px at 120px 820px, rgba(214,226,255,.55), rgba(214,226,255,0) 70%),
+      radial-gradient(1100px 600px at 2300px 760px, rgba(232,222,255,.45), rgba(232,222,255,0) 70%),
+      #f4f4f6;
+    font-family: "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  #orb { position: absolute; left: 470px; top: 215px; width: 380px; height: 380px; }
+  .text { position: absolute; left: 975px; top: 150px; }
+  h1 { margin: 0; font-size: 232px; font-weight: 700; letter-spacing: -0.065em; line-height: 1; color: #1d1d1f; margin-left: -10px; }
+  p { margin: 26px 0 0; font-size: 62px; font-weight: 500; letter-spacing: -0.035em; color: #6e6e73; }
+  .keys { display: flex; gap: 18px; margin-top: 48px; }
+  .key { height: 94px; min-width: 180px; padding: 0 30px; box-sizing: border-box; border-radius: 22px; background: #fff;
+         box-shadow: 0 1px 0 rgba(0,0,0,.04), 0 10px 26px rgba(0,0,0,.08), inset 0 0 0 1px rgba(0,0,0,.06);
+         display: flex; align-items: center; justify-content: center; gap: 14px;
+         font-family: "Segoe UI Variable Text", "Segoe UI", sans-serif; font-size: 27px; color: #6e6e73; letter-spacing: .01em; }
+  .key b { font-weight: 600; color: #1d1d1f; font-size: 29px; }
+  .key.space { min-width: 260px; }
+</style></head>
+<body>
+<canvas id="orb"></canvas>
+<div class="text">
+  <h1>Silly</h1>
+  <p>Your whole PC, one sentence away.</p>
+  <div class="keys"><div class="key"><b>Ctrl</b></div><div class="key"><b>Alt</b></div><div class="key space">space</div></div>
+</div>
+<script type="module">
+  import * as E from '../ui/orbs.js';
+  const cv = document.getElementById('orb'), S = 64, dpr = 380 / 64 * 2;   // drawn at 2× for a crisp image
+  cv.width = cv.height = S * dpr;
+  const ctx = cv.getContext('2d'), preset = E.r('breathing', S);
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  E.p(ctx, E.M[preset.mode](S, 4.2, preset.opts), new URLSearchParams(location.search).get('dark') === '1', null);
+  document.body.dataset.ready = '1';
+</script>
+</body></html>
